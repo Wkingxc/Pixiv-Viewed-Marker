@@ -150,6 +150,7 @@
     root.querySelectorAll?.('a[href*="/artworks/"]').forEach((anchor) => anchors.push(anchor));
 
     anchors.forEach((anchor) => {
+      if (anchor.closest("#pvm-author-panel")) return;
       const parsed = PVM.parsePixivUrl(anchor.href);
       const renderExcluded = isRenderExcludedPage();
       const visitState = parsed && viewedArtworkSet.has(parsed.id) && !renderExcluded
@@ -216,6 +217,30 @@
     scheduleStorageSync(document, 50);
   }
 
+  function recordVisitSafely(parsed, source, timestamp) {
+    const fallback = () => {
+      PVM.storage.recordParsedVisit(parsed, source, timestamp).catch(console.error);
+    };
+
+    try {
+      if (!chrome.runtime?.sendMessage) {
+        fallback();
+        return;
+      }
+
+      chrome.runtime
+        .sendMessage({
+          type: "PVM_RECORD_VISIT",
+          parsed,
+          source,
+          timestamp
+        })
+        .catch(fallback);
+    } catch (_error) {
+      fallback();
+    }
+  }
+
   function recordIntentFromEvent(event) {
     const anchor = event.target.closest?.("a[href]");
     if (!anchor) return;
@@ -238,16 +263,7 @@
     if (parsed.type === "artwork") viewedArtworkSet.add(parsed.id);
     if (parsed.type === "user") viewedUserSet.add(parsed.id);
 
-    const message = {
-      type: "PVM_RECORD_VISIT",
-      parsed,
-      source: event.type === "auxclick" ? "auxclick" : "click",
-      timestamp: now
-    };
-
-    chrome.runtime.sendMessage(message).catch(() => {
-      PVM.storage.recordParsedVisit(parsed, message.source, message.timestamp).catch(console.error);
-    });
+    recordVisitSafely(parsed, event.type === "auxclick" ? "auxclick" : "click", now);
 
     if (parsed.type === "artwork") {
       markAnchor(anchor, parsed);

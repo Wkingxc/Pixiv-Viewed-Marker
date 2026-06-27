@@ -28,12 +28,16 @@
   "content_scripts": [
     {
       "matches": ["https://www.pixiv.net/*"],
-      "css": ["src/content/content.css"],
+      "css": [
+        "src/content/content.css",
+        "src/content/author-panel.css"
+      ],
       "js": [
         "src/shared/constants.js",
         "src/shared/url-parser.js",
         "src/shared/storage.js",
-        "src/content/content.js"
+        "src/content/content.js",
+        "src/content/author-panel.js"
       ],
       "run_at": "document_idle"
     }
