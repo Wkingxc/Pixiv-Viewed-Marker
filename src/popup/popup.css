@@ -69,7 +69,7 @@ small {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   padding: 5px;
   margin-bottom: 14px;
@@ -155,14 +155,16 @@ input[type="color"] {
 }
 
 .switch-row,
-.range-row {
+.range-row,
+.number-row {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 12px;
 }
 
-.switch-row span {
+.switch-row span,
+.number-row span {
   display: grid;
 }
 
@@ -178,6 +180,22 @@ input[type="color"] {
 
 input[type="range"] {
   accent-color: var(--accent);
+}
+
+.number-row input {
+  width: 74px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 8px 9px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  font-weight: 800;
+}
+
+.author-card {
+  display: grid;
+  gap: 13px;
 }
 
 .setup[hidden] {

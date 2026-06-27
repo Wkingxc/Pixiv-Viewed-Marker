@@ -9,6 +9,10 @@
   const hideViewedEl = document.getElementById("hideViewed");
   const overlayOpacityEl = document.getElementById("overlayOpacity");
   const overlayValueEl = document.getElementById("overlayValue");
+  const authorGridColumnsEl = document.getElementById("authorGridColumns");
+  const authorMinPageCountEl = document.getElementById("authorMinPageCount");
+  const authorHighResEl = document.getElementById("authorHighRes");
+  const authorHoverPreviewEl = document.getElementById("authorHoverPreview");
   const excludeFormEl = document.getElementById("excludeForm");
   const excludeUrlEl = document.getElementById("excludeUrl");
   const excludedPagesEl = document.getElementById("excludedPages");
@@ -36,6 +40,12 @@
     };
   }
 
+  function clampNumber(value, min, max, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.min(Math.max(Math.round(number), min), max);
+  }
+
   function renderSettings(settings) {
     const hex = colorToHex(settings.artworkVisitedColor);
     visitedColorEl.value = hex;
@@ -45,6 +55,10 @@
     hideViewedEl.checked = Boolean(settings.hideViewedArtwork);
     overlayOpacityEl.value = String(settings.artworkImageOverlayOpacity ?? 0.28);
     overlayValueEl.textContent = `${Math.round(Number(overlayOpacityEl.value) * 100)}%`;
+    authorGridColumnsEl.value = String(clampNumber(settings.authorPageGridColumns, 2, 6, 6));
+    authorMinPageCountEl.value = String(clampNumber(settings.authorPageMinPageCount, 0, 999, 0));
+    authorHighResEl.checked = Boolean(settings.authorPageUseHighResThumbnails);
+    authorHoverPreviewEl.checked = Boolean(settings.authorPageHoverPreviewEnabled);
   }
 
   function renderExcludedPages(target, records) {
@@ -97,10 +111,16 @@
         markArtworkTitle: markTitleEl.checked,
         markArtworkImage: markImageEl.checked,
         hideViewedArtwork: hideViewedEl.checked,
-        artworkImageOverlayOpacity: Number(overlayOpacityEl.value)
+        artworkImageOverlayOpacity: Number(overlayOpacityEl.value),
+        authorPageGridColumns: clampNumber(authorGridColumnsEl.value, 2, 6, 6),
+        authorPageMinPageCount: clampNumber(authorMinPageCountEl.value, 0, 999, 0),
+        authorPageUseHighResThumbnails: authorHighResEl.checked,
+        authorPageHoverPreviewEnabled: authorHoverPreviewEl.checked
       };
 
       currentData.settings = await PVM.storage.saveSettings(settings);
+      authorGridColumnsEl.value = String(currentData.settings.authorPageGridColumns);
+      authorMinPageCountEl.value = String(currentData.settings.authorPageMinPageCount);
       colorValueEl.textContent = visitedColorEl.value.toUpperCase();
       overlayValueEl.textContent = `${Math.round(Number(overlayOpacityEl.value) * 100)}%`;
       setStatus("标记设置已保存。");
@@ -208,7 +228,7 @@
     });
   });
 
-  [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl].forEach((control) => {
+  [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl, authorGridColumnsEl, authorMinPageCountEl, authorHighResEl, authorHoverPreviewEl].forEach((control) => {
     control.addEventListener("input", scheduleSettingsSave);
     control.addEventListener("change", scheduleSettingsSave);
   });

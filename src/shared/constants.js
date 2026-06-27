@@ -11,6 +11,10 @@
     markArtworkImage: false,
     hideViewedArtwork: false,
     artworkImageOverlayOpacity: 0.28,
+    authorPageGridColumns: 6,
+    authorPageMinPageCount: 0,
+    authorPageUseHighResThumbnails: false,
+    authorPageHoverPreviewEnabled: false,
     markUserName: false,
     importBookmarkAddUrls: false
   };

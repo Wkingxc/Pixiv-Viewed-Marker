@@ -18,6 +18,7 @@
 
       <nav class="tabs" aria-label="功能页签">
         <button class="tab is-active" data-tab="mark" type="button">标记</button>
+        <button class="tab" data-tab="author" type="button">作者页</button>
         <button class="tab" data-tab="exclude" type="button">排除</button>
         <button class="tab" data-tab="backup" type="button">备份</button>
       </nav>
@@ -69,6 +70,47 @@
         <section id="setupSection" class="setup">
           <p>首次使用可从浏览器历史初始化一次。完成后会移除 history 权限，后续只依赖本地记录。</p>
           <button id="importHistory" type="button">初始化导入 Pixiv 历史</button>
+        </section>
+      </section>
+
+      <section class="tab-panel" id="tab-author">
+        <section class="card author-card">
+          <div>
+            <h2>作者页</h2>
+            <p>控制 Pixiv 作者页作品列表的密度、页数过滤和缩略图清晰度。</p>
+          </div>
+
+          <label class="number-row">
+            <span>
+              <strong>每行</strong>
+              <small>作者页每行显示几个作品，越少缩略图越大。</small>
+            </span>
+            <input id="authorGridColumns" type="number" min="2" max="6" step="1" value="6">
+          </label>
+
+          <label class="number-row">
+            <span>
+              <strong>最低页数</strong>
+              <small>隐藏页数少于该值的作品，0 或 1 表示不筛选。</small>
+            </span>
+            <input id="authorMinPageCount" type="number" min="0" max="999" step="1" value="0">
+          </label>
+
+          <label class="switch-row">
+            <span>
+              <strong>高清缩略图</strong>
+              <small>尝试用 Pixiv 接口返回的更清晰封面替换作者页卡片图。</small>
+            </span>
+            <input id="authorHighRes" type="checkbox">
+          </label>
+
+          <label class="switch-row">
+            <span>
+              <strong>实验性悬停预览</strong>
+              <small>悬停作品时尝试获取更高清首图，用于验证接口图片质量。</small>
+            </span>
+            <input id="authorHoverPreview" type="checkbox">
+          </label>
         </section>
       </section>
 

@@ -1,5 +1,4 @@
-#pvm-author-panel,
-#pvm-author-home-toolbar {
+#pvm-author-panel {
   --pvm-ap-scale: 1;
   display: flex;
   flex-direction: column;
@@ -20,17 +19,7 @@
   overflow: hidden;
 }
 
-#pvm-author-home-toolbar {
-  top: 84px;
-  right: 24px;
-  width: 176px;
-  min-width: 132px;
-  max-width: 260px;
-  max-height: none;
-}
-
-#pvm-author-panel[hidden],
-#pvm-author-home-toolbar[hidden] {
+#pvm-author-panel[hidden] {
   display: none !important;
 }
 
@@ -42,30 +31,6 @@
   margin-bottom: 10px;
   cursor: grab;
   user-select: none;
-}
-
-#pvm-author-home-toolbar .pvm-ap-head {
-  cursor: grab;
-}
-
-.pvm-ap-resize-handle {
-  position: absolute;
-  left: 4px;
-  bottom: 4px;
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 5px;
-  padding: 0;
-  background:
-    linear-gradient(45deg, transparent 0 45%, rgba(255, 255, 255, 0.42) 45% 55%, transparent 55%),
-    linear-gradient(45deg, transparent 0 62%, rgba(255, 255, 255, 0.32) 62% 72%, transparent 72%);
-  cursor: ew-resize;
-}
-
-#pvm-author-home-toolbar.is-resizing,
-#pvm-author-home-toolbar.is-resizing * {
-  cursor: ew-resize !important;
 }
 
 .pvm-ap-current {
@@ -299,75 +264,6 @@
   text-align: center;
 }
 
-.pvm-ap-home-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.pvm-ap-field {
-  display: grid;
-  gap: 4px;
-  color: rgba(248, 243, 246, 0.7);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.pvm-ap-input {
-  min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 7px 8px;
-  color: #f8f3f6;
-  background: rgba(255, 255, 255, 0.1);
-  font: inherit;
-  font-weight: 800;
-}
-
-.pvm-ap-input:focus {
-  border-color: rgba(244, 118, 162, 0.85);
-  outline: none;
-}
-
-.pvm-ap-stepper {
-  display: grid;
-  grid-template-columns: 36px minmax(36px, 1fr) 36px;
-  align-items: center;
-  gap: 6px;
-}
-
-.pvm-ap-step-btn {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 34px;
-  border: 0;
-  border-radius: 10px;
-  color: #f8f3f6;
-  background: rgba(255, 255, 255, 0.1);
-  font-size: 18px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.pvm-ap-step-btn:hover {
-  background: rgba(244, 118, 162, 0.78);
-}
-
-.pvm-ap-step-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.38;
-}
-
-.pvm-ap-step-value {
-  min-width: 0;
-  color: #f8f3f6;
-  font-size: 15px;
-  font-weight: 900;
-  text-align: center;
-}
-
 .pvm-author-home-grid {
   grid-template-columns: repeat(var(--pvm-author-home-columns, 6), minmax(0, 1fr)) !important;
   justify-items: center !important;
@@ -388,10 +284,63 @@
   display: none !important;
 }
 
+#pvm-author-hover-preview {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483645;
+  max-width: min(520px, 46vw);
+  max-height: 70vh;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  padding: 10px;
+  color: #f8f3f6;
+  background: rgba(18, 20, 22, 0.92);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#pvm-author-hover-preview[hidden] {
+  display: none !important;
+}
+
+.pvm-ahp-image {
+  display: block;
+  max-width: calc(min(520px, 46vw) - 20px);
+  max-height: calc(70vh - 46px);
+  border-radius: 11px;
+  object-fit: contain;
+}
+
+.pvm-ahp-caption,
+.pvm-ahp-message {
+  max-width: calc(min(520px, 46vw) - 20px);
+  color: rgba(248, 243, 246, 0.76);
+  font: 12px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-weight: 800;
+}
+
+.pvm-ahp-caption {
+  margin-top: 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pvm-ahp-message {
+  min-width: 132px;
+  padding: 12px 10px;
+  text-align: center;
+}
+
+#pvm-author-hover-preview.is-error .pvm-ahp-message {
+  color: #ffd0d6;
+}
+
 #pvm-author-panel.is-dragging,
-#pvm-author-panel.is-dragging .pvm-ap-head,
-#pvm-author-home-toolbar.is-dragging,
-#pvm-author-home-toolbar.is-dragging .pvm-ap-head {
+#pvm-author-panel.is-dragging .pvm-ap-head {
   cursor: grabbing;
 }
 
@@ -407,7 +356,6 @@
 #pvm-author-panel.is-collapsed .pvm-ap-current,
 #pvm-author-panel.is-collapsed .pvm-ap-actions > :not(.pvm-ap-collapse-btn),
 #pvm-author-panel.is-collapsed .pvm-ap-grid,
-#pvm-author-panel.is-collapsed .pvm-ap-home-controls,
 #pvm-author-panel.is-collapsed .pvm-ap-footer,
 #pvm-author-panel.is-collapsed .pvm-ap-message {
   display: none;
@@ -464,8 +412,7 @@
 }
 
 @media (max-width: 900px) {
-  #pvm-author-panel,
-  #pvm-author-home-toolbar {
+  #pvm-author-panel {
     display: none !important;
   }
 }

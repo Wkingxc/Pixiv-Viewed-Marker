@@ -9,11 +9,8 @@
   const HOME_MIN_PAGE_MAX = 999;
   const HOME_GRID_CLASS = "pvm-author-home-grid";
   const HOME_HIDDEN_CLASS = "pvm-hidden-page-count-artwork";
-  const HOME_TOOLBAR_MIN_WIDTH = 132;
-  const HOME_TOOLBAR_MAX_WIDTH = 260;
 
   let panel = null;
-  let homeToolbar = null;
   let currentArtworkId = null;
   let currentRouteContext = null;
   let dragState = null;
@@ -21,6 +18,11 @@
   let wheelPagingLocked = false;
   let enhancementTimer = null;
   let applyingEnhancements = false;
+  let hoverPreview = null;
+  let hoverPreviewTimer = null;
+  let hoverPreviewToken = 0;
+  const hoverPreviewCache = new Map();
+  let settings = { ...PVM.DEFAULT_SETTINGS };
   let state = {
     ids: [],
     workMap: {},
@@ -35,12 +37,7 @@
     top: null,
     scaleIndex: 0,
     pageMode: "buttons",
-    homeGridColumns: 6,
-    homeMinPageCount: 0,
-    authorPanelExpanded: false,
-    homeToolbarWidth: 176,
-    homeToolbarLeft: null,
-    homeToolbarTop: null
+    authorPanelExpanded: false
   };
 
   function stripLocale(pathname) {
@@ -84,11 +81,45 @@
     );
   }
 
+  function pickPreviewImage(work) {
+    return (
+      work.urls?.original ||
+      work.urls?.regular ||
+      work.urls?.small ||
+      work.url ||
+      work.urls?.thumb_mini ||
+      work.thumbnail ||
+      work.thumbnailUrl ||
+      ""
+    );
+  }
+
+  function pickHighResImage(work) {
+    return (
+      work.urls?.regular ||
+      work.urls?.small ||
+      work.url ||
+      work.urls?.thumb_mini ||
+      work.thumbnail ||
+      work.thumbnailUrl ||
+      ""
+    );
+  }
+
+  function pickHighResImageSet(work) {
+    const image = pickHighResImage(work);
+    if (!image) return "";
+    return `${image} 1x, ${image} 2x`;
+  }
+
   function normalizeWork(work, id) {
     return {
       id: String(work.id || id),
       title: work.title || "Untitled",
       image: pickImage(work),
+      highResImage: pickHighResImage(work),
+      highResImageSet: pickHighResImageSet(work),
+      highResImageChecked: true,
       pageCount: Number(work.pageCount || work.page_count || 1),
       createDate: work.createDate || work.create_date || "",
       xRestrict: Number(work.xRestrict || work.x_restrict || 0)
@@ -126,12 +157,7 @@
       top: Number.isFinite(raw?.top) ? raw.top : null,
       scaleIndex,
       pageMode,
-      homeGridColumns: clampNumber(raw?.homeGridColumns, HOME_GRID_MIN_COLUMNS, HOME_GRID_MAX_COLUMNS, 6),
-      homeMinPageCount: clampNumber(raw?.homeMinPageCount, 0, HOME_MIN_PAGE_MAX, 0),
-      authorPanelExpanded: raw?.authorPanelExpanded === true,
-      homeToolbarWidth: clampNumber(raw?.homeToolbarWidth, HOME_TOOLBAR_MIN_WIDTH, HOME_TOOLBAR_MAX_WIDTH, 176),
-      homeToolbarLeft: Number.isFinite(raw?.homeToolbarLeft) ? raw.homeToolbarLeft : null,
-      homeToolbarTop: Number.isFinite(raw?.homeToolbarTop) ? raw.homeToolbarTop : null
+      authorPanelExpanded: raw?.authorPanelExpanded === true
     };
   }
 
@@ -148,6 +174,44 @@
     chrome.storage.local.set({ [UI_STORAGE_KEY]: uiState }).catch((error) => {
       console.warn("[PVM] Failed to save author panel UI state.", error);
     });
+  }
+
+  function normalizeAuthorSettings(raw = {}) {
+    return {
+      ...PVM.DEFAULT_SETTINGS,
+      ...(raw || {}),
+      authorPageGridColumns: clampNumber(raw.authorPageGridColumns, HOME_GRID_MIN_COLUMNS, HOME_GRID_MAX_COLUMNS, 6),
+      authorPageMinPageCount: clampNumber(raw.authorPageMinPageCount, 0, HOME_MIN_PAGE_MAX, 0),
+      authorPageUseHighResThumbnails: raw.authorPageUseHighResThumbnails === true,
+      authorPageHoverPreviewEnabled: raw.authorPageHoverPreviewEnabled === true
+    };
+  }
+
+  async function loadSettings() {
+    const data = await PVM.storage.getAllData();
+    settings = normalizeAuthorSettings(data.settings);
+  }
+
+  async function migrateLegacyHomeSettings() {
+    try {
+      const data = await chrome.storage.local.get([UI_STORAGE_KEY, "settings"]);
+      const legacy = data[UI_STORAGE_KEY];
+      const storedSettings = data.settings || {};
+      const patch = {};
+      if (storedSettings.authorPageGridColumns === undefined && Number.isFinite(legacy?.homeGridColumns)) {
+        patch.authorPageGridColumns = clampNumber(legacy.homeGridColumns, HOME_GRID_MIN_COLUMNS, HOME_GRID_MAX_COLUMNS, 6);
+      }
+      if (storedSettings.authorPageMinPageCount === undefined && Number.isFinite(legacy?.homeMinPageCount)) {
+        patch.authorPageMinPageCount = clampNumber(legacy.homeMinPageCount, 0, HOME_MIN_PAGE_MAX, 0);
+      }
+      if (storedSettings.authorPageUseHighResThumbnails === undefined && legacy?.homeUseHighResThumbnails === true) {
+        patch.authorPageUseHighResThumbnails = true;
+      }
+      if (Object.keys(patch).length === 0) return;
+      settings = normalizeAuthorSettings(await PVM.storage.saveSettings(patch));
+    } catch (error) {
+      console.warn("[PVM] Failed to migrate author homepage settings.", error);
+    }
   }
 
   function getTotalPages() {
@@ -192,37 +256,6 @@
     panel.style.right = "24px";
   }
 
-  function getDefaultHomeToolbarTop() {
-    const panelHeight = panel && !panel.hidden ? panel.offsetHeight : 0;
-    return 84 + panelHeight + 12;
-  }
-
-  function stackHomeToolbarBelowPanel() {
-    if (!homeToolbar) return;
-    homeToolbar.style.left = "auto";
-    homeToolbar.style.top = `${getDefaultHomeToolbarTop()}px`;
-    homeToolbar.style.right = "24px";
-  }
-
-  function resetHomeToolbarPositionIfOverlappingPanel() {
-    if (!homeToolbar || !panel || panel.hidden || homeToolbar.hidden) return;
-    if (!Number.isFinite(uiState.homeToolbarLeft) || !Number.isFinite(uiState.homeToolbarTop)) return;
-
-    const panelRect = panel.getBoundingClientRect();
-    const toolbarRect = homeToolbar.getBoundingClientRect();
-    const overlaps = !(
-      toolbarRect.left >= panelRect.right ||
-      toolbarRect.right <= panelRect.left ||
-      toolbarRect.top >= panelRect.bottom ||
-      toolbarRect.bottom <= panelRect.top
-    );
-    if (!overlaps) return;
-
-    uiState = { ...uiState, homeToolbarLeft: null, homeToolbarTop: null };
-    saveUiState();
-    stackHomeToolbarBelowPanel();
-  }
-
   async function getCache(userId) {
     const key = `pvmAuthorPanel:${userId}`;
     const data = await chrome.storage.local.get(key);
@@ -254,6 +287,35 @@
       userId: String(body.userId || body.user_id || ""),
       userName: body.userName || body.user_name || ""
     };
+  }
+
+  async function fetchArtworkPreview(artworkId) {
+    const id = String(artworkId);
+    if (hoverPreviewCache.has(id)) return hoverPreviewCache.get(id);
+
+    let result = null;
+    try {
+      const body = await fetchJson(`/ajax/illust/${id}`);
+      const image = pickPreviewImage(body);
+      if (image) {
+        result = {
+          id,
+          title: body.title || state.workMap[id]?.title || `Artwork ${id}`,
+          image
+        };
+      }
+    } catch (error) {
+      console.warn("[PVM] Failed to fetch hover preview image.", error);
+    }
+
+    if (!result) {
+      const fallback = state.workMap[id];
+      const image = fallback?.highResImage || fallback?.image || "";
+      result = image ? { id, title: fallback?.title || `Artwork ${id}`, image } : null;
+    }
+
+    hoverPreviewCache.set(id, result);
+    return result;
   }
 
   async function fetchAuthorWorkIds(userId) {
@@ -456,126 +518,6 @@
     `;
   }
 
-  function renderStepper(action, value, min, max) {
-    return `
-      <div class="pvm-ap-stepper" data-stepper="${action}">
-        <button class="pvm-ap-step-btn" data-action="${action}-down" type="button" ${value <= min ? "disabled" : ""}>−</button>
-        <span class="pvm-ap-step-value">${value}</span>
-        <button class="pvm-ap-step-btn" data-action="${action}-up" type="button" ${value >= max ? "disabled" : ""}>＋</button>
-      </div>
-    `;
-  }
-
-  function renderHomeControls() {
-    return `
-      <div class="pvm-ap-home-controls">
-        <label class="pvm-ap-field">
-          <span>每行</span>
-          ${renderStepper("home-columns", uiState.homeGridColumns, HOME_GRID_MIN_COLUMNS, HOME_GRID_MAX_COLUMNS)}
-        </label>
-        <label class="pvm-ap-field">
-          <span>最低页数</span>
-          <input class="pvm-ap-input" data-action="home-min-page-count-change" type="number" min="0" max="${HOME_MIN_PAGE_MAX}" step="1" value="${uiState.homeMinPageCount}">
-        </label>
-      </div>
-    `;
-  }
-
-  function ensureHomeToolbar() {
-    if (homeToolbar) return homeToolbar;
-    homeToolbar = document.createElement("aside");
-    homeToolbar.id = "pvm-author-home-toolbar";
-    document.documentElement.append(homeToolbar);
-    homeToolbar.addEventListener("pointerdown", startPanelDrag);
-    return homeToolbar;
-  }
-
-  function applyHomeToolbarUi(persistClamp = false) {
-    if (!homeToolbar) return;
-
-    homeToolbar.style.width = `${uiState.homeToolbarWidth}px`;
-
-    if (Number.isFinite(uiState.homeToolbarLeft) && Number.isFinite(uiState.homeToolbarTop)) {
-      const next = clampElementPosition(homeToolbar, uiState.homeToolbarLeft, uiState.homeToolbarTop);
-      homeToolbar.style.left = `${next.left}px`;
-      homeToolbar.style.top = `${next.top}px`;
-      homeToolbar.style.right = "auto";
-      if (next.left !== uiState.homeToolbarLeft || next.top !== uiState.homeToolbarTop) {
-        uiState = { ...uiState, homeToolbarLeft: next.left, homeToolbarTop: next.top };
-        if (persistClamp) saveUiState();
-      }
-      return;
-    }
-
-    homeToolbar.style.left = "auto";
-    homeToolbar.style.top = `${getDefaultHomeToolbarTop()}px`;
-    homeToolbar.style.right = "24px";
-  }
-
-  function hideHomeToolbar() {
-    if (homeToolbar) homeToolbar.hidden = true;
-  }
-
-  function bindHomeToolbarEvents() {
-    if (!homeToolbar) return;
-    homeToolbar.querySelectorAll(".pvm-ap-step-btn[data-action]").forEach((button) => {
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const action = button.dataset.action;
-        if (action === "home-columns-down" || action === "home-columns-up") {
-          const direction = action.endsWith("up") ? 1 : -1;
-          uiState = {
-            ...uiState,
-            homeGridColumns: clampNumber(uiState.homeGridColumns + direction, HOME_GRID_MIN_COLUMNS, HOME_GRID_MAX_COLUMNS, 6)
-          };
-        }
-        saveUiState();
-        renderHomeToolbar();
-        scheduleUserArtworkEnhancements(0);
-      });
-    });
-    homeToolbar.querySelectorAll('.pvm-ap-input[data-action="home-min-page-count-change"]').forEach((input) => {
-      const update = () => {
-        uiState = {
-          ...uiState,
-          homeMinPageCount: clampNumber(input.value, 0, HOME_MIN_PAGE_MAX, 0)
-        };
-        input.value = String(uiState.homeMinPageCount);
-        saveUiState();
-        scheduleUserArtworkEnhancements(0);
-      };
-      input.addEventListener("change", update);
-      input.addEventListener("blur", update);
-      input.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") update();
-      });
-    });
-    homeToolbar.querySelectorAll(".pvm-ap-resize-handle").forEach((handle) => {
-      handle.addEventListener("pointerdown", startToolbarResize);
-    });
-  }
-
-  function renderHomeToolbar() {
-    if (currentRouteContext?.type !== "userArtworks") {
-      hideHomeToolbar();
-      return;
-    }
-
-    const target = ensureHomeToolbar();
-    target.hidden = false;
-    applyHomeToolbarUi();
-    target.innerHTML = `
-      <div class="pvm-ap-head" data-drag-handle="true">
-        <span class="pvm-ap-current">作者页显示</span>
-      </div>
-      ${renderHomeControls()}
-      <button class="pvm-ap-resize-handle" data-resize-handle="true" type="button" title="拖动调整宽度" aria-label="拖动调整宽度"></button>
-    `;
-    bindHomeToolbarEvents();
-    resetHomeToolbarPositionIfOverlappingPanel();
-  }
-
   function renderFooter(totalPages) {
     const showCurrentButton = currentRouteContext?.type === "artwork";
     if (uiState.pageMode === "wheel") {
@@ -763,38 +705,14 @@
     });
   }
 
-  function startToolbarResize(event) {
-    if (event.button !== 0 || !homeToolbar) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const rect = homeToolbar.getBoundingClientRect();
-    dragState = {
-      target: homeToolbar,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      startLeft: rect.left,
-      startRight: rect.right,
-      startTop: rect.top,
-      startWidth: rect.width,
-      moved: false,
-      resizingToolbar: true,
-      fromCollapsedButton: false
-    };
-    homeToolbar.classList.add("is-resizing");
-    homeToolbar.setPointerCapture?.(event.pointerId);
-  }
-
   function startPanelDrag(event) {
     if (event.button !== 0) return;
     const targetPanel = event.currentTarget;
     const isAuthorPanel = targetPanel === panel;
-    const isHomePanel = targetPanel === homeToolbar;
 
     if (isAuthorPanel && !panel.classList.contains("is-collapsed") && event.target.closest(".pvm-ap-btn, .pvm-ap-card, a, input, select, textarea")) {
       return;
     }
-    if (isHomePanel && event.target.closest("input, select, textarea, button")) return;
 
     const isCollapsedHandle = isAuthorPanel && panel.classList.contains("is-collapsed") && event.target.closest(".pvm-ap-collapse-btn");
     const isHeaderHandle = Boolean(event.target.closest("[data-drag-handle]"));
@@ -823,23 +741,8 @@
     if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) dragState.moved = true;
     if (dragState.moved) event.preventDefault();
 
-    if (dragState.resizingToolbar) {
-      const nextWidth = clampNumber(dragState.startWidth - deltaX, HOME_TOOLBAR_MIN_WIDTH, HOME_TOOLBAR_MAX_WIDTH, 176);
-      const nextLeft = dragState.startRight - nextWidth;
-      uiState = { ...uiState, homeToolbarWidth: nextWidth, homeToolbarLeft: nextLeft, homeToolbarTop: dragState.startTop };
-      homeToolbar.style.width = `${nextWidth}px`;
-      homeToolbar.style.left = `${nextLeft}px`;
-      homeToolbar.style.top = `${dragState.startTop}px`;
-      homeToolbar.style.right = "auto";
-      return;
-    }
-
     const next = clampElementPosition(dragState.target, dragState.startLeft + deltaX, dragState.startTop + deltaY);
-    if (dragState.target === homeToolbar) {
-      uiState = { ...uiState, homeToolbarLeft: next.left, homeToolbarTop: next.top };
-    } else {
-      uiState = { ...uiState, left: next.left, top: next.top };
-    }
+    uiState = { ...uiState, left: next.left, top: next.top };
     dragState.target.style.left = `${next.left}px`;
     dragState.target.style.top = `${next.top}px`;
     dragState.target.style.right = "auto";
@@ -883,6 +786,8 @@
   }
 
   function clearUserArtworkPageEnhancements() {
+    clearHoverPreview();
+    restoreUserArtworkCardImages();
     document.documentElement.style.removeProperty("--pvm-author-home-columns");
     document.documentElement.style.removeProperty("--pvm-author-home-scale");
     document.querySelectorAll(`.${HOME_GRID_CLASS}`).forEach((node) => {
@@ -904,14 +809,14 @@
   function getArtworkListContainer() {
     const entries = [];
     document.querySelectorAll('a[href*="/artworks/"]').forEach((anchor) => {
-      if (anchor.closest("#pvm-author-panel, #pvm-author-home-toolbar")) return;
+      if (anchor.closest("#pvm-author-panel")) return;
       const parsed = PVM.parsePixivUrl(anchor.href);
       if (!parsed || parsed.type !== "artwork") return;
 
       let node = anchor;
       for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
         const parent = node.parentElement;
-        if (!parent || parent.closest("#pvm-author-panel, #pvm-author-home-toolbar")) continue;
+        if (!parent || parent.closest("#pvm-author-panel")) continue;
         const siblingCount = Array.from(parent.children).filter((child) => {
           if (child.matches?.('a[href*="/artworks/"]')) return true;
           return child.querySelector?.('a[href*="/artworks/"]');
@@ -942,9 +847,211 @@
     return container?.entries || [];
   }
 
+  function getEntryImage(entry) {
+    return entry?.card?.querySelector?.("img") || entry?.anchor?.querySelector?.("img") || null;
+  }
+
+  function ensureHoverPreview() {
+    if (hoverPreview) return hoverPreview;
+    hoverPreview = document.createElement("aside");
+    hoverPreview.id = "pvm-author-hover-preview";
+    hoverPreview.hidden = true;
+    document.documentElement.append(hoverPreview);
+    return hoverPreview;
+  }
+
+  function positionHoverPreview(event) {
+    if (!hoverPreview || hoverPreview.hidden) return;
+    const margin = 12;
+    const gap = 18;
+    const width = hoverPreview.offsetWidth || 320;
+    const height = hoverPreview.offsetHeight || 240;
+    let left = event.clientX + gap;
+    let top = event.clientY + gap;
+    if (left + width + margin > window.innerWidth) left = event.clientX - width - gap;
+    if (top + height + margin > window.innerHeight) top = event.clientY - height - gap;
+    hoverPreview.style.left = `${Math.max(margin, left)}px`;
+    hoverPreview.style.top = `${Math.max(margin, top)}px`;
+  }
+
+  function renderHoverPreview(message, event) {
+    const target = ensureHoverPreview();
+    target.classList.remove("has-image", "is-error");
+    target.innerHTML = `<div class="pvm-ahp-message">${escapeHtml(message)}</div>`;
+    target.hidden = false;
+    positionHoverPreview(event);
+  }
+
+  function renderHoverPreviewImage(preview, event) {
+    const target = ensureHoverPreview();
+    target.classList.add("has-image");
+    target.classList.remove("is-error");
+    target.innerHTML = `
+      <img class="pvm-ahp-image" src="${escapeAttr(preview.image)}" alt="">
+      <div class="pvm-ahp-caption">${escapeHtml(preview.title || "预览")}</div>
+    `;
+    target.hidden = false;
+    positionHoverPreview(event);
+  }
+
+  function hideHoverPreview() {
+    window.clearTimeout(hoverPreviewTimer);
+    hoverPreviewTimer = null;
+    hoverPreviewToken += 1;
+    if (hoverPreview) hoverPreview.hidden = true;
+  }
+
+  function clearHoverPreview() {
+    hideHoverPreview();
+  }
+
+  function startHoverPreview(entry, event) {
+    if (!settings.authorPageHoverPreviewEnabled) return;
+    window.clearTimeout(hoverPreviewTimer);
+    const token = hoverPreviewToken + 1;
+    hoverPreviewToken = token;
+    hoverPreviewTimer = window.setTimeout(async () => {
+      renderHoverPreview("加载预览中…", event);
+      const preview = await fetchArtworkPreview(entry.id);
+      if (token !== hoverPreviewToken) return;
+      if (!preview?.image) {
+        const target = ensureHoverPreview();
+        target.classList.add("is-error");
+        target.innerHTML = '<div class="pvm-ahp-message">没有拿到可预览图片</div>';
+        target.hidden = false;
+        positionHoverPreview(event);
+        return;
+      }
+      renderHoverPreviewImage(preview, event);
+    }, 140);
+  }
+
+  function bindHoverPreviewEntry(entry) {
+    if (!settings.authorPageHoverPreviewEnabled) return;
+    if (!entry?.card || entry.card.dataset.pvmHoverPreviewBound === "true") return;
+    entry.card.dataset.pvmHoverPreviewBound = "true";
+    entry.card.addEventListener("pointerenter", (event) => startHoverPreview(entry, event));
+    entry.card.addEventListener("pointermove", positionHoverPreview);
+    entry.card.addEventListener("pointerleave", hideHoverPreview);
+  }
+
+  function applyHoverPreviewBindings(entries) {
+    if (!settings.authorPageHoverPreviewEnabled) {
+      hideHoverPreview();
+      return;
+    }
+    entries.forEach(bindHoverPreviewEntry);
+  }
+
+  function rememberOriginalAttribute(node, attribute) {
+    const property = attribute.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
+    const valueKey = `pvmOriginal${property[0].toUpperCase()}${property.slice(1)}`;
+    const hadKey = `pvmOriginalHad${property[0].toUpperCase()}${property.slice(1)}`;
+    if (node.dataset[hadKey] !== undefined) return;
+    node.dataset[valueKey] = node.getAttribute(attribute) || "";
+    node.dataset[hadKey] = node.hasAttribute(attribute) ? "true" : "false";
+  }
+
+  function restoreOriginalAttribute(node, attribute) {
+    const property = attribute.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
+    const valueKey = `pvmOriginal${property[0].toUpperCase()}${property.slice(1)}`;
+    const hadKey = `pvmOriginalHad${property[0].toUpperCase()}${property.slice(1)}`;
+    if (node.dataset[hadKey] === "true") {
+      node.setAttribute(attribute, node.dataset[valueKey] || "");
+    } else {
+      node.removeAttribute(attribute);
+    }
+    delete node.dataset[valueKey];
+    delete node.dataset[hadKey];
+  }
+
+  function getResponsiveSources(img) {
+    const picture = img.closest("picture");
+    return picture ? Array.from(picture.querySelectorAll("source")) : [];
+  }
+
+  function rememberOriginalImage(img) {
+    if (!img || img.dataset.pvmOriginalImageStored === "true") return;
+    img.dataset.pvmOriginalImageStored = "true";
+    ["src", "srcset", "sizes", "data-src", "data-srcset"].forEach((attribute) => {
+      rememberOriginalAttribute(img, attribute);
+    });
+    getResponsiveSources(img).forEach((source) => {
+      source.dataset.pvmHighResSourceTouched = "true";
+      ["srcset", "sizes", "data-srcset"].forEach((attribute) => {
+        rememberOriginalAttribute(source, attribute);
+      });
+    });
+  }
+
+  function restoreHighResSource(source) {
+    if (!source || source.dataset.pvmHighResSourceTouched !== "true") return;
+    ["srcset", "sizes", "data-srcset"].forEach((attribute) => {
+      restoreOriginalAttribute(source, attribute);
+    });
+    delete source.dataset.pvmHighResSourceTouched;
+  }
+
+  function restoreHighResImage(img) {
+    if (!img || img.dataset.pvmHighResImageApplied !== "true") return;
+    getResponsiveSources(img).forEach(restoreHighResSource);
+    ["src", "srcset", "sizes", "data-src", "data-srcset"].forEach((attribute) => {
+      restoreOriginalAttribute(img, attribute);
+    });
+    delete img.dataset.pvmHighResImageApplied;
+    delete img.dataset.pvmHighResImageUrl;
+    delete img.dataset.pvmOriginalImageStored;
+  }
+
+  function restoreUserArtworkCardImages(root = document) {
+    root.querySelectorAll?.('img[data-pvm-high-res-image-applied="true"]').forEach(restoreHighResImage);
+    root.querySelectorAll?.('source[data-pvm-high-res-source-touched="true"]').forEach(restoreHighResSource);
+  }
+
+  function applyHighResImageToEntry(entry) {
+    const highResImage = state.workMap[entry.id]?.highResImage;
+    if (!highResImage) return;
+
+    const img = getEntryImage(entry);
+    if (!img || img.closest("#pvm-author-panel")) return;
+
+    const highResImageSet = state.workMap[entry.id]?.highResImageSet || `${highResImage} 1x, ${highResImage} 2x`;
+    const alreadyApplied = img.dataset.pvmHighResImageUrl === highResImage
+      && img.getAttribute("src") === highResImage
+      && img.getAttribute("srcset") === highResImageSet;
+    if (alreadyApplied) return;
+
+    rememberOriginalImage(img);
+    img.dataset.pvmHighResImageApplied = "true";
+    img.dataset.pvmHighResImageUrl = highResImage;
+    img.setAttribute("src", highResImage);
+    img.setAttribute("srcset", highResImageSet);
+    img.setAttribute("data-src", highResImage);
+    img.setAttribute("data-srcset", highResImageSet);
+    img.removeAttribute("sizes");
+    getResponsiveSources(img).forEach((source) => {
+      source.dataset.pvmHighResSourceTouched = "true";
+      ["srcset", "sizes", "data-srcset"].forEach((attribute) => {
+        rememberOriginalAttribute(source, attribute);
+      });
+      source.setAttribute("srcset", highResImageSet);
+      source.setAttribute("data-srcset", highResImageSet);
+      source.removeAttribute("sizes");
+    });
+  }
+
+  function getIdsMissingDetails(ids, options = {}) {
+    const requireHighRes = options.requireHighRes === true;
+    return ids.filter((id) => {
+      const work = state.workMap[id];
+      if (!work) return true;
+      return requireHighRes && work.highResImageChecked !== true;
+    });
+  }
+
   function applyUserArtworkGrid(container) {
-    const scale = Math.max(1, HOME_GRID_MAX_COLUMNS / uiState.homeGridColumns);
-    document.documentElement.style.setProperty("--pvm-author-home-columns", String(uiState.homeGridColumns));
+    const scale = Math.max(1, HOME_GRID_MAX_COLUMNS / settings.authorPageGridColumns);
+    document.documentElement.style.setProperty("--pvm-author-home-columns", String(settings.authorPageGridColumns));
     document.documentElement.style.setProperty("--pvm-author-home-scale", String(scale));
     document.querySelectorAll(`.${HOME_GRID_CLASS}`).forEach((node) => {
       if (node !== container?.parent) {
@@ -976,9 +1083,9 @@
     }
   }
 
-  async function ensureDetailsForIds(ids) {
+  async function ensureDetailsForIds(ids, options = {}) {
     if (!state.userId || ids.length === 0) return;
-    const missingIds = ids.filter((id) => !state.workMap[id]);
+    const missingIds = getIdsMissingDetails(ids, options);
     if (missingIds.length === 0) return;
 
     const details = await fetchWorkDetails(state.userId, missingIds);
@@ -1002,17 +1109,28 @@
     try {
       const container = getArtworkListContainer();
       const entries = container?.entries || [];
+      const entryIds = Array.from(new Set(entries.map(({ id }) => id)));
       applyUserArtworkGrid(container);
-      renderHomeToolbar();
+      applyHoverPreviewBindings(entries);
 
-      const minPageCount = uiState.homeMinPageCount;
+      const minPageCount = settings.authorPageMinPageCount;
+      const useHighResThumbnails = settings.authorPageUseHighResThumbnails;
+      if (minPageCount > 1 || useHighResThumbnails) {
+        await ensureDetailsForIds(entryIds, { requireHighRes: useHighResThumbnails });
+      }
+
+      if (useHighResThumbnails) {
+        entries.forEach(applyHighResImageToEntry);
+      } else {
+        restoreUserArtworkCardImages();
+      }
+
       if (minPageCount <= 1) {
         entries.forEach(({ card }) => card.classList.remove(HOME_HIDDEN_CLASS));
         document.querySelectorAll(`.${HOME_HIDDEN_CLASS}`).forEach((node) => node.classList.remove(HOME_HIDDEN_CLASS));
         return;
       }
 
-      await ensureDetailsForIds(Array.from(new Set(entries.map(({ id }) => id))));
       entries.forEach(({ id, card }) => {
         const pageCount = state.workMap[id]?.pageCount;
         if (!Number.isFinite(Number(pageCount))) {
@@ -1041,7 +1159,6 @@
     if (!routeContext) {
       currentArtworkId = null;
       if (panel) panel.hidden = true;
-      hideHomeToolbar();
       clearUserArtworkPageEnhancements();
       return;
     }
@@ -1058,7 +1175,6 @@
 
     currentArtworkId = routeContext.type === "artwork" ? routeContext.artworkId : null;
     if (routeContext.type !== "userArtworks") {
-      hideHomeToolbar();
       clearUserArtworkPageEnhancements();
     }
     state = {
@@ -1117,6 +1233,8 @@
   function watchDom() {
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
+        if (mutation.target?.parentElement?.closest?.("#pvm-author-hover-preview")) continue;
+        if (Array.from(mutation.addedNodes).some((node) => node.id === "pvm-author-hover-preview" || node.closest?.("#pvm-author-hover-preview"))) continue;
         if (mutation.addedNodes.length > 0 || mutation.type === "characterData") {
           scheduleUserArtworkEnhancements();
           return;
@@ -1130,6 +1248,10 @@
   function watchStorage() {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") return;
+      if (changes.settings) {
+        settings = normalizeAuthorSettings(changes.settings.newValue);
+        scheduleUserArtworkEnhancements(0);
+      }
       if (changes.viewedArtworks || changes.settings) {
         renderPanel().catch(console.error);
       }
@@ -1140,15 +1262,18 @@
     window.addEventListener("pointermove", movePanelDrag);
     window.addEventListener("pointerup", endPanelDrag);
     window.addEventListener("pointercancel", endPanelDrag);
+    window.addEventListener("scroll", hideHoverPreview, true);
     window.addEventListener("resize", () => {
+      hideHoverPreview();
       applyPanelUi(true);
-      applyHomeToolbarUi(true);
       scheduleUserArtworkEnhancements(0);
     });
   }
 
   async function start() {
     await loadUiState();
+    await loadSettings();
+    await migrateLegacyHomeSettings();
     await loadPanelForCurrentRoute();
     watchRoute();
     watchDom();
