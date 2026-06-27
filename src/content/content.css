@@ -1,0 +1,27 @@
+.pvm-viewed-artwork,
+.pvm-viewed-artwork * {
+  color: var(--pvm-viewed-color, rgba(244, 118, 162, 1)) !important;
+}
+
+[data-pvm-viewed-card="true"] [data-pvm-title-candidate="true"] {
+  color: var(--pvm-viewed-color, rgba(244, 118, 162, 1)) !important;
+}
+
+.pvm-viewed-image-wrap {
+  position: relative !important;
+}
+
+.pvm-viewed-image-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--pvm-viewed-color, rgba(244, 118, 162, 1));
+  opacity: var(--pvm-overlay-opacity, 0.28);
+}
+
+.pvm-hidden-viewed-artwork {
+  display: none !important;
+}

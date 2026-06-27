@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pixiv Viewed Marker</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <img src="../../icons/icon48.png" alt="" class="logo">
+        <div>
+          <h1>Pixiv Viewed Marker</h1>
+          <p>本地记录、即时标记，不上传任何访问数据。</p>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="功能页签">
+        <button class="tab is-active" data-tab="mark" type="button">标记</button>
+        <button class="tab" data-tab="exclude" type="button">排除</button>
+        <button class="tab" data-tab="backup" type="button">备份</button>
+      </nav>
+
+      <section class="tab-panel is-active" id="tab-mark">
+        <section class="card color-card">
+          <div>
+            <h2>已访问标题颜色</h2>
+            <p>改变 Pixiv 列表里已访问作品的标题色。</p>
+          </div>
+          <label class="color-row">
+            <input id="visitedColor" type="color" value="#f476a2">
+            <span id="colorValue">#F476A2</span>
+          </label>
+        </section>
+
+        <section class="card switches">
+          <label class="switch-row">
+            <span>
+              <strong>标题变色</strong>
+              <small>主功能，模拟更可靠的 visited 效果。</small>
+            </span>
+            <input id="markTitle" type="checkbox" checked>
+          </label>
+
+          <label class="switch-row">
+            <span>
+              <strong>图片遮罩</strong>
+              <small>给已访问作品图片叠一层轻量遮罩。</small>
+            </span>
+            <input id="markImage" type="checkbox">
+          </label>
+
+          <label class="switch-row">
+            <span>
+              <strong>隐藏已访问作品</strong>
+              <small>更绝对：整张作品卡片直接不显示。</small>
+            </span>
+            <input id="hideViewed" type="checkbox">
+          </label>
+
+          <label class="range-row">
+            <span>遮罩强度</span>
+            <input id="overlayOpacity" type="range" min="0.08" max="0.7" step="0.02" value="0.28">
+            <output id="overlayValue">28%</output>
+          </label>
+        </section>
+
+        <section id="setupSection" class="setup">
+          <p>首次使用可从浏览器历史初始化一次。完成后会移除 history 权限，后续只依赖本地记录。</p>
+          <button id="importHistory" type="button">初始化导入 Pixiv 历史</button>
+        </section>
+      </section>
+
+      <section class="tab-panel" id="tab-exclude">
+        <section class="card exclude-card">
+          <h2>排除页面渲染</h2>
+          <p>输入页面 URL。命中这个页面时不变色、不遮罩、不隐藏，例如你的收藏页。</p>
+          <form id="excludeForm" class="exclude-form">
+            <input id="excludeUrl" type="text" placeholder="https://www.pixiv.net/users/71318526/bookmarks/artworks">
+            <button type="submit">加入排除</button>
+          </form>
+        </section>
+
+        <details class="exclude-list" open>
+          <summary>已排除页面</summary>
+          <ul id="excludedPages" class="plain-list"></ul>
+        </details>
+      </section>
+
+      <section class="tab-panel" id="tab-backup">
+        <section class="card backup-card">
+          <h2>备份与迁移</h2>
+          <p>导出 JSON 可留作本地备份；导入会合并记录，不会覆盖现有数据。</p>
+          <div class="actions">
+            <button id="exportBackup" type="button">导出备份</button>
+            <button id="importBackup" type="button">导入备份</button>
+            <button id="clearData" class="danger" type="button">清空记录</button>
+          </div>
+        </section>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+      <input id="backupFile" type="file" accept="application/json,.json" hidden>
+    </main>
+
+    <script src="../shared/constants.js"></script>
+    <script src="../shared/url-parser.js"></script>
+    <script src="../shared/storage.js"></script>
+    <script src="../shared/history-importer.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
