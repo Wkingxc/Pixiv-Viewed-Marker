@@ -20,13 +20,33 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== "PVM_RECORD_VISIT") return false;
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "PVM_RECORD_VISIT") {
+    PVM.storage
+      .recordParsedVisit(message.parsed, message.source || "click", message.timestamp || Date.now())
+      .then((record) => sendResponse({ ok: true, record }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
 
-  PVM.storage
-    .recordParsedVisit(message.parsed, message.source || "click", message.timestamp || Date.now())
-    .then((record) => sendResponse({ ok: true, record }))
-    .catch((error) => sendResponse({ ok: false, error: error.message }));
+  if (message?.type === "PVM_OPEN_TAB") {
+    const url = message.url;
+    const active = message.active === true;
+    if (typeof url !== "string" || !url) {
+      sendResponse({ ok: false, error: "missing url" });
+      return false;
+    }
+    const openerTabId = sender?.tab?.id;
+    const openerIndex = sender?.tab?.index;
+    const createProps = { url, active };
+    if (Number.isInteger(openerTabId)) createProps.openerTabId = openerTabId;
+    if (Number.isInteger(openerIndex)) createProps.index = openerIndex + 1;
+    chrome.tabs
+      .create(createProps)
+      .then((tab) => sendResponse({ ok: true, tabId: tab?.id }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
 
-  return true;
+  return false;
 });

@@ -1,13 +1,15 @@
 #pvm-author-panel {
   --pvm-ap-scale: 1;
+  --pvm-ap-offset-x: 0px;
   display: flex;
   flex-direction: column;
   position: fixed;
-  top: 84px;
-  right: 24px;
+  /* 展开状态：锚定右下角，缩放时左边沿向左生长 */
+  right: 20px;
+  bottom: 20px;
   z-index: 2147483646;
   width: calc(392px * var(--pvm-ap-scale));
-  max-height: calc(100vh - 112px);
+  max-height: calc(100vh - 80px);
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 18px;
@@ -17,6 +19,7 @@
   backdrop-filter: blur(14px);
   font: 13px/1.45 "Segoe UI", "Microsoft YaHei", sans-serif;
   overflow: hidden;
+  transform: translateX(var(--pvm-ap-offset-x, 0px));
 }
 
 #pvm-author-panel[hidden] {
@@ -29,7 +32,6 @@
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
-  cursor: grab;
   user-select: none;
 }
 
@@ -127,8 +129,8 @@
   grid-auto-rows: minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
-  padding-right: 4px;
-  overflow-y: auto;
+  padding-right: 0;
+  overflow: hidden;
 }
 
 .pvm-ap-card {
@@ -359,109 +361,70 @@
 
 #pvm-author-panel.is-dragging,
 #pvm-author-panel.is-dragging .pvm-ap-head {
-  cursor: grabbing;
+  /* 不再支持拖动，仅保留占位以兼容旧选择器 */
 }
 
-#pvm-author-panel.is-collapsed {
-  width: 44px;
-  height: 44px;
-  max-height: none;
+/* ---- 常驻入口图标 ---- */
+#pvm-author-toggle {
+  position: fixed;
+  left: 16px;
+  bottom: 56px;
+  z-index: 2147483647;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 50%;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  overflow: visible;
-}
-
-#pvm-author-panel.is-collapsed .pvm-ap-current,
-#pvm-author-panel.is-collapsed .pvm-ap-actions > :not(.pvm-ap-collapse-btn),
-#pvm-author-panel.is-collapsed .pvm-ap-grid,
-#pvm-author-panel.is-collapsed .pvm-ap-footer,
-#pvm-author-panel.is-collapsed .pvm-ap-message {
-  display: none;
-}
-
-#pvm-author-panel.is-collapsed .pvm-ap-head,
-#pvm-author-panel.is-collapsed .pvm-ap-actions {
-  display: contents;
-}
-
-#pvm-author-panel.is-collapsed .pvm-ap-collapse-btn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: 50%;
-  padding: 0;
   color: #fff;
-  background: linear-gradient(135deg, #ff8fb6 0%, #f476a2 55%, #dc4e86 100%);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(135deg, #ffa9c5 0%, #f476a2 52%, #d2407a 100%);
+  font-size: 0;
+  line-height: 0;
   box-shadow:
-    0 8px 22px rgba(220, 78, 134, 0.42),
-    0 1px 0 rgba(255, 255, 255, 0.32) inset,
-    0 -2px 6px rgba(0, 0, 0, 0.16) inset;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-  cursor: grab;
-}
-
-#pvm-author-panel.is-collapsed .pvm-ap-collapse-btn:hover {
-  background: linear-gradient(135deg, #ffa1c5 0%, #f476a2 55%, #d24881 100%);
-  box-shadow:
-    0 10px 26px rgba(220, 78, 134, 0.5),
-    0 1px 0 rgba(255, 255, 255, 0.36) inset,
+    0 6px 16px rgba(220, 78, 134, 0.42),
+    0 2px 4px rgba(0, 0, 0, 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
     0 -2px 6px rgba(0, 0, 0, 0.18) inset;
-  transform: translateY(-1px);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
-#pvm-author-panel.is-collapsed.is-dragging .pvm-ap-collapse-btn,
-#pvm-author-panel.is-collapsed .pvm-ap-collapse-btn:active {
-  cursor: grabbing;
-  transform: translateY(0);
+#pvm-author-toggle[hidden] {
+  display: none !important;
+}
+
+#pvm-author-toggle:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
   box-shadow:
-    0 6px 16px rgba(220, 78, 134, 0.45),
-    0 1px 0 rgba(255, 255, 255, 0.28) inset,
+    0 8px 20px rgba(220, 78, 134, 0.52),
+    0 3px 6px rgba(0, 0, 0, 0.2),
+    0 1px 0 rgba(255, 255, 255, 0.55) inset,
     0 -2px 6px rgba(0, 0, 0, 0.2) inset;
 }
 
-#pvm-author-panel.is-collapsed .pvm-ap-collapse-icon {
-  display: inline-grid;
-  place-items: center;
+#pvm-author-toggle:active {
+  transform: translateY(0);
+  box-shadow:
+    0 4px 10px rgba(220, 78, 134, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 -2px 6px rgba(0, 0, 0, 0.22) inset;
+}
+
+#pvm-author-toggle.is-active {
+  filter: brightness(0.95);
+}
+
+.pvm-ap-toggle-svg {
   width: 20px;
   height: 20px;
-  font-size: 0;
-}
-
-.pvm-ap-collapse-svg {
-  width: 18px;
-  height: 18px;
   display: block;
   color: #fff;
-}
-
-#pvm-author-panel:not(.is-collapsed) .pvm-ap-collapse-btn {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-#pvm-author-panel:not(.is-collapsed) .pvm-ap-collapse-btn:hover {
-  background: rgba(244, 118, 162, 0.6);
-}
-
-#pvm-author-panel:not(.is-collapsed) .pvm-ap-collapse-svg {
-  width: 14px;
-  height: 14px;
-}
-
-#pvm-author-panel.is-collapsed .pvm-ap-collapse-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.22));
 }
 
 .pvm-ap-footer-wheel {

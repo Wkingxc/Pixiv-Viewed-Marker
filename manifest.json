@@ -3,7 +3,7 @@
   "name": "Pixiv Viewed Marker",
   "description": "Mark Pixiv artwork titles that have already been opened, using local extension storage.",
   "version": "0.1.0",
-  "permissions": ["storage"],
+  "permissions": ["storage", "tabs"],
   "optional_permissions": ["history"],
   "host_permissions": ["https://www.pixiv.net/*"],
   "icons": {
@@ -37,7 +37,11 @@
         "src/shared/url-parser.js",
         "src/shared/storage.js",
         "src/content/content.js",
-        "src/content/author-panel.js"
+        "src/content/pvm-author-core.js",
+        "src/content/pvm-hover-preview.js",
+        "src/content/pvm-author-page.js",
+        "src/content/pvm-artwork-panel.js",
+        "src/content/pvm-author-bootstrap.js"
       ],
       "run_at": "document_idle"
     }

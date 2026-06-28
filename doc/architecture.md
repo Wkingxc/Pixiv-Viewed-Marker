@@ -16,10 +16,14 @@ Pixiv-Viewed-Marker/
 │   ├── background/
 │   │   └── service-worker.js
 │   ├── content/
-│   │   ├── content.js
+│   │   ├── content.js                  # 已访问标记（不依赖作者面板，可独立工作）
 │   │   ├── content.css
-│   │   ├── author-panel.js
-│   │   └── author-panel.css
+│   │   ├── author-panel.css            # 作品页悬浮面板 + 作者页网格的样式
+│   │   ├── pvm-author-core.js          # 共享状态、API 客户端、缓存、settings/uiState 持久化、quality 工具
+│   │   ├── pvm-hover-preview.js        # 作者页缩略图悬停预览浮层
+│   │   ├── pvm-author-page.js          # 作者页网格列数 / 最低页数过滤 / 高清缩略图替换
+│   │   ├── pvm-artwork-panel.js        # 作品页悬浮"作者作品速览"面板：渲染、事件、缩放、横向拖动
+│   │   └── pvm-author-bootstrap.js     # 路由调度、watchRoute/watchDom/watchStorage/watchWindow、start
 │   ├── popup/
 │   │   ├── popup.html
 │   │   ├── popup.css
@@ -31,19 +35,36 @@ Pixiv-Viewed-Marker/
 │       └── history-importer.js
 ├── doc/
 │   └── architecture.md
+├── AGENTS.md
 └── README.md
 ```
+
+### 内容脚本加载顺序与命名空间
+
+`manifest.json` 中 `content_scripts.js` 的加载顺序固定为：
+
+1. `shared/constants.js`、`shared/url-parser.js`、`shared/storage.js`：暴露 `globalThis.PVM`。
+2. `content/content.js`：已访问标记，独立模块。
+3. `content/pvm-author-core.js`：在 `PVM.author` 命名空间下注册常量、共享状态、API 客户端、缓存、settings/uiState 持久化等。
+4. `content/pvm-hover-preview.js`：在 `PVM.author.hover` 下注册悬停预览浮层。
+5. `content/pvm-author-page.js`：在 `PVM.author.authorPage` 下注册作者页增强（grid 列数 / 最低页数 / 高清缩略图）。
+6. `content/pvm-artwork-panel.js`：在 `PVM.author.artworkPanel` 下注册作品页悬浮面板。
+7. `content/pvm-author-bootstrap.js`：调用以上模块完成路由调度、watcher 与 `start()` 启动。
+
+每个 `pvm-*.js` 文件都以 `(function (global) { ... })(globalThis)` 包裹，避免污染全局。文件之间只通过 `PVM.author.*` 暴露的函数沟通；共享可变状态由 `pvm-author-core.js` 用 getter / setter / patch 函数对外暴露，避免每个文件持有副本。
 
 ## Manifest
 
 `manifest.json` 定义扩展入口：
 
-- 默认权限：`storage`
+- 默认权限：`storage`、`tabs`
 - 可选权限：`history`
 - 注入范围：`https://www.pixiv.net/*`
 - popup：`src/popup/popup.html`
 - background：`src/background/service-worker.js`
 - content scripts：共享模块、访问标记模块、作者作品速览面板模块
+
+`tabs` 权限用于 background 通过 `chrome.tabs.create({ active: false, index: tab.index + 1, openerTabId })` 让作者作品速览卡片支持中键 / Ctrl·Cmd+左键在后台新标签打开。
 
 ## Shared 模块
 
@@ -101,37 +122,60 @@ Pixiv-Viewed-Marker/
 - 图片遮罩
 - 隐藏已访问作品卡片
 
-### `author-panel.js`
+### `pvm-author-core.js`
 
-负责 Pixiv 页面内增强：
+挂在 `PVM.author` 下，给其它三个模块提供基础设施：
 
-1. 作品页“作者作品速览”悬浮面板。
-2. 作者页作品列表显示增强。
+- 常量：`PAGE_SIZE`、`SCALE_STEPS`、HOME_GRID 系列、Quality 字典等。
+- 共享可变状态：`settings` / `state` / `uiState` / `currentRouteContext` / `currentArtworkId`，通过 `getSettings/setSettings/getState/patchState/...` 暴露。
+- 通用工具：`stripLocale`、`getRouteContext`、`escapeHtml`、`chunk`、`clampNumber` 等。
+- Quality 工具：`pickImage` / `pickPreviewImage` / `pickHighResImage` / `resolveQualityUrl` / `normalizeWork`。
+- API 客户端：`fetchJson` / `fetchCurrentArtwork` / `fetchAuthorWorkIds` / `fetchWorkDetails` / `fetchHighResUrls`（带 in-memory 缓存）。
+- chrome.storage 持久化：`loadUiState` / `saveUiState` / `loadSettings` / `migrateLegacyHomeSettings` / `normalizeAuthorSettings` / `getCache` / `setCache`。
+- 详情加载：`fetchAuthorWorksByUserId` / `fetchAuthorWorksForArtwork` / `ensureDetailsForPage` / `preloadPageDetails` / `ensureDetailsForIds` / `workForId` / `currentPageFor` / `fallbackWorksFromDom` / `getViewedSet`。
 
-作品页面板：
+### `pvm-hover-preview.js`
 
-- 在 `/artworks/{id}` 页面显示，默认折叠为右侧圆形入口，避免刷新后遮挡页面。
-- 通过 Pixiv 网页端接口读取当前作品作者 ID。
-- 请求作者作品 ID 索引。
-- 按当前页懒加载作品缩略图详情。
-- 使用 `chrome.storage.local` 缓存作者作品索引和缩略图数据。
-- 右侧固定面板按 `2 x 3` 分页显示。
-- 支持拖动、折叠/展开、缩放、按钮翻页/滚轮翻页。
-- “定位”按钮跳回当前作品所在分页。
-- 当前作品保留在列表中并加遮罩标识。
-- 已访问作品跟随原插件设置，只做标题变色/边框，不额外显示“已看”徽章。
-- 接口失败时降级为从页面 DOM 抽取已有作品链接。
+挂在 `PVM.author.hover` 下，负责作者页缩略图鼠标悬停时的独立浮层：
 
-作者页显示增强：
+- 拉 `/ajax/illust/{id}` 取大图并显示原图候选信息，命中缓存避免重复拉取。
+- 暴露 `applyHoverPreviewBindings(entries)` / `bindHoverPreviewEntry(entry)` / `hideHoverPreview()` / `clearHoverPreview()`。
 
-- 在 `/users/{id}`、`/users/{id}/artworks`、`/users/{id}/illustrations`、`/users/{id}/manga` 以及其子路径生效，控制入口在扩展 popup 的“作者页”页签。
+### `pvm-author-page.js`
+
+挂在 `PVM.author.authorPage` 下，负责作者页 (`/users/{id}` 及其子页) 列表的增强：
+
+- 在 `/users/{id}`、`/users/{id}/artworks`、`/users/{id}/illustrations`、`/users/{id}/manga` 以及其子路径生效；控制入口在扩展 popup 的"作者页"页签。
 - 通过扫描 `a[href*="/artworks/"]` 找到当前页面作品卡片，并选择包含最多作品卡片的父容器作为作品网格容器。
 - 给作品网格容器添加 `.pvm-author-home-grid`，通过 CSS 变量控制列数和缩放比例。
-- `每行` 设置调整作品列表列数，默认使用已有页面缩略图做 CSS 等比缩放，不重新请求图片。
-- `高清缩略图` 设置开启后，会按当前作者页 DOM 卡片补拉作品详情，并用 Pixiv 接口返回的更清晰封面替换卡片图片；关闭或离开作者页时恢复原始图片属性。
-- `实验性悬停预览` 开启后，鼠标悬停作品卡片时会临时请求 `/ajax/illust/{id}` 并用独立浮层展示第一页高质量候选图，不改写 Pixiv 卡片 DOM。
-- `最低页数` 设置按输入阈值隐藏低页数作品，页数来自 Pixiv 作者作品详情接口。
-- 作者页显示设置保存在 shared `settings`，而不是页面内悬浮窗状态。
+- `每行作品数` 设置调整作品列表列数，默认使用已有页面缩略图做 CSS 等比缩放，不重新请求图片。
+- `高清缩略图` 开启后，会按当前作者页 DOM 卡片补拉作品详情，并用 Pixiv 接口返回的更清晰封面替换卡片图片；关闭或离开作者页时恢复原始 `src` / `srcset` / `sizes` / lazy loading 属性。
+- `最低页数` 按输入阈值隐藏低页数作品，页数来自 Pixiv 作者作品详情接口。
+- 暴露 `applyUserArtworkPageEnhancements()` / `scheduleUserArtworkEnhancements(delay)` / `clearUserArtworkPageEnhancements()` / `getArtworkListContainer()`。
+
+### `pvm-artwork-panel.js`
+
+挂在 `PVM.author.artworkPanel` 下，负责作品页 (`/artworks/{id}`) 的悬浮"作者作品速览"面板：
+
+- 仅在 `/artworks/{id}` 路由生效；其它路由（作者页、关注列表、收藏页等）不渲染面板和入口图标。
+- 收起态：左下角粉色圆形按钮（`left: 16px; bottom: 56px`），位置固定不可拖动，不记忆位置。
+- 展开态：锚定右下角 (`right: 20px; bottom: 20px`)，缩放时向左生长。
+- 内部按 `2 × 3` 分页显示作者的全部作品。
+- 支持按住顶部"当前位置 N/M"文字横向拖动平移面板（仅水平方向，垂直方向锁定）。
+- 支持缩放（100% / 120% / 140%）、按钮翻页/滚轮翻页、定位当前作品。
+- "定位"按钮跳回当前作品所在分页。
+- 当前作品保留在列表中并加遮罩标识。
+- 已访问作品跟随原插件设置，只做标题变色/边框，不额外显示"已看"徽章。
+- 卡片支持鼠标中键 / Ctrl·Cmd+左键在后台新标签打开：通过 `chrome.runtime.sendMessage` 把 URL 发给 background，由 background 调 `chrome.tabs.create({ active: false, index: tab.index + 1, openerTabId })`，避免 `window.open` 强制前台行为以及"中键自动滚动"导致的双击问题。
+- 暴露 `renderPanel()` / `applyPanelUi()` / `setPanelCollapsed(boolean)` / `getPanel()`。
+
+### `pvm-author-bootstrap.js`
+
+调度层，不持有业务状态：
+
+- `loadPanelForCurrentRoute()`：读取 `author.getRouteContext()` 决定是作品页面板还是作者页增强；按需调用 `fetchAuthorWorksForArtwork` / `fetchAuthorWorksByUserId`，失败时降级到 `fallbackWorksFromDom`。
+- `watchRoute()` / `watchDom()` / `watchStorage()` / `watchWindow()`：监听 URL 变化、DOM 变化、`chrome.storage` 变化、窗口大小变化，触发相应的重渲。
+- `start()`：依次 `loadUiState` → `loadSettings` → `migrateLegacyHomeSettings` → `loadPanelForCurrentRoute` → 注册 watcher。
 
 ### `author-panel.css`
 
@@ -150,9 +194,11 @@ Pixiv-Viewed-Marker/
 popup 提供四个标签页：
 
 - 标记：颜色、标题变色、图片遮罩、隐藏已访问作品
-- 作者页显示：每行数量、最低页数过滤、高清缩略图开关、实验性悬停预览
+- 作者页：每行作品数（`−` / 数字 / `+` 步进按钮）、最低页数过滤、高清缩略图开关、实验性悬停预览开关
 - 排除：按页面 URL 禁用当前页面标记渲染
 - 备份：导出、导入、清空本地记录
+
+打开 popup 时根据当前激活标签页的 URL 自动聚焦：作者页路由聚焦"作者页"页签，其它情况聚焦"标记"。
 
 历史导入只作为首次初始化入口，完成后会移除 `history` 权限。
 
@@ -175,16 +221,24 @@ pvmAuthorPanelUi
 
 `exclusions.pages` 使用 pathname 作为 key。
 
-`settings` 包含访问标记设置和作者页显示设置；作者页显示字段包括 `authorPageGridColumns`、`authorPageMinPageCount`、`authorPageUseHighResThumbnails`、`authorPageHoverPreviewEnabled`。
+`settings` 包含访问标记设置和作者页显示设置；作者页显示字段包括 `authorPageGridColumns`、`authorPageMinPageCount`、`authorPageUseHighResThumbnails`、`authorPageHighResThumbnailQuality`、`authorPageHoverPreviewEnabled`、`authorPageHoverPreviewQuality`。`authorPageHighResThumbnailQuality` 默认为 `"original"`，`authorPageHoverPreviewQuality` 关闭时为 `"off"`、打开时为 `"original"`。
 
 `pvmAuthorPanel:{userId}` 是作者作品速览缓存，包含作者作品 ID 索引、已加载作品详情和缓存时间。
 
-`pvmAuthorPanelUi` 是作品页作者速览悬浮面板状态，包含面板位置、缩放、翻页模式和折叠状态。
+`pvmAuthorPanelUi` 是作品页作者速览悬浮面板状态，仅包含 `scaleIndex`（缩放档位）、`pageMode`（翻页模式）、`authorPanelExpanded`（是否展开）、`offsetX`（顶部文字拖动后的水平偏移）。**不再记忆位置**：收起态固定左下角，展开态固定右下角。
+
+## Background 模块
+
+`src/background/service-worker.js` 负责后台消息处理：
+
+- `PVM_RECORD_VISIT`：调 `PVM.storage.recordParsedVisit` 记录访问。
+- `PVM_OPEN_TAB`：调 `chrome.tabs.create({ url, active, openerTabId, index: senderTab.index + 1 })`，用于作品页悬浮面板卡片中键 / Ctrl·Cmd+左键的后台新标签打开。`active: false` 时新标签在后台；`index: senderTab.index + 1` 让新标签紧邻当前标签右侧，符合浏览器原生中键行为。
 
 ## 开发注意
 
 - 不依赖 Pixiv 的动态 class，优先依赖 URL 和稳定接口。
 - 页面扫描时不要在循环中访问 storage，必须先加载到内存 Set。
 - 作者作品速览依赖 Pixiv 网页端接口，接口变化时应保留 DOM 降级方案。
-- 面板内链接需要隔离 Pixiv 页面自身点击拦截，避免图片点击第一次不跳转。
+- 面板内卡片用 bubble 阶段 `click` 监听做 SPA 跳转；中键 / Ctrl·Cmd+左键通过 background 调 `chrome.tabs.create` 后台打开，避免 `window.open` 强制前台、以及 Chrome 中键自动滚动模式导致的"按两次"。
 - 隐藏已访问作品不应作用到作者作品速览面板自身。
+- 作品页悬浮面板与作者页"已关注作者"等路由互斥：`getRouteContext` 的 userArtworks 正则要严格匹配 `/users/{id}` 和 `/users/{id}/(artworks|illustrations|manga)[/...]`，避免误命中 `/following`、`/followers`、`/bookmarks`。
