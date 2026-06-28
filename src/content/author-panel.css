@@ -3,11 +3,6 @@
   --pvm-ap-offset-x: 0px;
   display: flex;
   flex-direction: column;
-  position: fixed;
-  /* 展开状态：锚定右下角，缩放时左边沿向左生长 */
-  right: 20px;
-  bottom: 20px;
-  z-index: 2147483646;
   width: calc(392px * var(--pvm-ap-scale));
   max-height: calc(100vh - 80px);
   padding: 12px;
@@ -19,7 +14,52 @@
   backdrop-filter: blur(14px);
   font: 13px/1.45 "Segoe UI", "Microsoft YaHei", sans-serif;
   overflow: hidden;
+}
+
+#pvm-author-panel.is-fixed-fallback,
+#pvm-author-panel:not(.is-embedded) {
+  position: fixed;
+  /* 展开状态：锚定右下角，缩放时左边沿向左生长 */
+  right: 20px;
+  bottom: 20px;
+  z-index: 2147483646;
   transform: translateX(var(--pvm-ap-offset-x, 0px));
+}
+
+#pvm-author-panel.is-embedded {
+  position: static;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  margin: 0 0 16px;
+  transform: none;
+}
+
+.pvm-artwork-layout-host {
+  --pvm-artwork-rail-width: clamp(392px, 28vw, 460px);
+}
+
+@media (min-width: 1180px) {
+  .pvm-artwork-layout-host {
+    column-gap: 24px !important;
+  }
+
+  .pvm-artwork-side-rail {
+    flex: 0 0 var(--pvm-artwork-rail-width) !important;
+    width: var(--pvm-artwork-rail-width) !important;
+    min-width: var(--pvm-artwork-rail-width) !important;
+    max-width: var(--pvm-artwork-rail-width) !important;
+  }
+}
+
+#pvm-author-panel.is-embedded .pvm-ap-grid {
+  flex: 0 0 auto;
+}
+
+#pvm-author-panel.is-embedded .pvm-ap-footer {
+  position: static;
 }
 
 #pvm-author-panel[hidden] {
@@ -247,6 +287,28 @@
   border-radius: 0 0 18px 18px;
   background: rgba(18, 20, 22, 0.94);
   backdrop-filter: blur(14px);
+}
+
+.pvm-ap-footer-slider {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.pvm-ap-footer-slider .pvm-ap-footer-left {
+  justify-content: space-between;
+}
+
+.pvm-ap-slider-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.pvm-ap-page-slider {
+  width: 100%;
+  accent-color: #f476a2;
+  cursor: pointer;
 }
 
 .pvm-ap-footer-left {

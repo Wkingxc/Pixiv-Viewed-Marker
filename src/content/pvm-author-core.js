@@ -37,7 +37,7 @@
   };
   let uiState = {
     scaleIndex: 0,
-    pageMode: "buttons",
+    pageMode: "slider",
     authorPanelExpanded: false,
     offsetX: 0
   };
@@ -438,7 +438,7 @@
     const scaleIndex = Number.isInteger(raw?.scaleIndex)
       ? Math.min(Math.max(raw.scaleIndex, 0), author.SCALE_STEPS.length - 1)
       : 0;
-    const pageMode = raw?.pageMode === "wheel" ? "wheel" : "buttons";
+    const pageMode = raw?.pageMode === "wheel" ? "wheel" : "slider";
     const offsetX = Number.isFinite(raw?.offsetX) ? raw.offsetX : 0;
     return {
       scaleIndex,

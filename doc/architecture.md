@@ -18,11 +18,11 @@ Pixiv-Viewed-Marker/
 │   ├── content/
 │   │   ├── content.js                  # 已访问标记（不依赖作者面板，可独立工作）
 │   │   ├── content.css
-│   │   ├── author-panel.css            # 作品页悬浮面板 + 作者页网格的样式
+│   │   ├── author-panel.css            # 作品页作者作品速览 + 作者页网格的样式
 │   │   ├── pvm-author-core.js          # 共享状态、API 客户端、缓存、settings/uiState 持久化、quality 工具
 │   │   ├── pvm-hover-preview.js        # 作者页缩略图悬停预览浮层
 │   │   ├── pvm-author-page.js          # 作者页 / 作品页"相关作品"网格列数 / 最低页数过滤 / 高清缩略图替换
-│   │   ├── pvm-artwork-panel.js        # 作品页悬浮"作者作品速览"面板：渲染、事件、缩放、横向拖动
+│   │   ├── pvm-artwork-panel.js        # 作品页"作者作品速览"面板：右侧栏嵌入/浮动回退、渲染、事件、缩放、翻页
 │   │   ├── pvm-artwork-sections.js     # 作品页区块控制：隐藏作者其他作品横幅 / 评论区
 │   │   └── pvm-author-bootstrap.js     # 路由调度、watchRoute/watchDom/watchStorage/watchWindow、start
 │   ├── popup/
@@ -161,19 +161,21 @@ Pixiv-Viewed-Marker/
 
 ### `pvm-artwork-panel.js`
 
-挂在 `PVM.author.artworkPanel` 下，负责作品页 (`/artworks/{id}`) 的悬浮"作者作品速览"面板：
+挂在 `PVM.author.artworkPanel` 下，负责作品页 (`/artworks/{id}`) 的"作者作品速览"面板：
 
 - 仅在 `/artworks/{id}` 路由生效；其它路由（作者页、关注列表、收藏页等）不渲染面板和入口图标。
-- 收起态：左下角粉色圆形按钮（`left: 16px; bottom: 56px`），位置固定不可拖动，不记忆位置。
-- 展开态：锚定右下角 (`right: 20px; bottom: 20px`)，缩放时向左生长。
+- 优先嵌入 Pixiv 作品页真实右侧栏：通过结构判断 `main` 与兄弟 `aside`，给父容器加 `.pvm-artwork-layout-host`、给右侧栏加 `.pvm-artwork-side-rail`，避免依赖 Pixiv 动态 class。
+- 宽屏下（`min-width: 1180px`）用 CSS 变量 `--pvm-artwork-rail-width: clamp(392px, 28vw, 460px)` 扩展右侧栏，面板 `width: 100%` 填满右栏，左侧作品区可被压缩。
+- 找不到真实右侧栏时回退为固定浮动：左下角粉色圆形按钮（`left: 16px; bottom: 56px`），展开态锚定右下角 (`right: 20px; bottom: 20px`)。
 - 内部按 `2 × 3` 分页显示作者的全部作品。
-- 支持按住顶部"当前位置 N/M"文字横向拖动平移面板（仅水平方向，垂直方向锁定）。
-- 支持缩放（100% / 120% / 140%）、按钮翻页/滚轮翻页、定位当前作品。
+- 固定浮动回退模式支持按住顶部"当前位置 N/M"文字横向拖动平移面板；嵌入模式禁用该拖动。
+- 支持缩放（100% / 120% / 140%）、滑动翻页 / 滚轮翻页、定位当前作品。旧持久化值 `pageMode: "buttons"` 会归一化为 `"slider"`。
+- 滑动翻页模式底部渲染 `input[type="range"][data-action="page-slider"]`；滚轮翻页模式继续在面板 `wheel` 事件中切换分页。
 - "定位"按钮跳回当前作品所在分页。
 - 当前作品保留在列表中并加遮罩标识。
 - 已访问作品跟随原插件设置，只做标题变色/边框，不额外显示"已看"徽章。
-- 卡片支持鼠标中键 / Ctrl·Cmd+左键在后台新标签打开：通过 `chrome.runtime.sendMessage` 把 URL 发给 background，由 background 调 `chrome.tabs.create({ active: false, index: tab.index + 1, openerTabId })`，避免 `window.open` 强制前台行为以及"中键自动滚动"导致的双击问题。
-- 暴露 `renderPanel()` / `applyPanelUi()` / `setPanelCollapsed(boolean)` / `getPanel()`。
+- 卡片支持鼠标中键 / Ctrl·Cmd+左键在后台新标签打开：通过 `chrome.runtime.sendMessage` 把 URL 发给 background，由 background 调 `chrome.tabs.create({ active: false, index: tab.index + 1, openerTabId })`；普通左键在 `mousedown` 阶段触发当前标签跳转，避免 Pixiv 懒加载重排吞掉第一次 `click`。
+- 暴露 `renderPanel()` / `applyPanelUi()` / `remountPanelForCurrentRoute()` / `findEmbedHost()` / `setPanelExpanded(boolean)` / `getPanel()` / `getToggle()`。
 
 ### `pvm-artwork-sections.js`
 
@@ -182,7 +184,7 @@ Pixiv-Viewed-Marker/
 - `artworkPageHideAuthorWorks`：找到包含当前作者主页链接 + 多张该作者其它作品缩略图的 `<section>`，加上 `.pvm-hidden-author-works-banner`（CSS 中 `display: none !important`）。当前作者 ID 来自 `author.getState().userId`（由 `pvm-author-bootstrap` 在 artwork 路由拉作者作品索引时填入）。
 - `artworkPageHideComments`：扫描 `<main>` 下含 `h1/h2/h3` 文本匹配 `コメント / Comments / 评论 / 댓글` 的 section，加上 `.pvm-hidden-comments-section`。
 - 关闭对应开关或离开 artwork 路由时移除上述 class，DOM 不会被破坏，只是 `display: none`。
-- 主图爱心拦截器（`hookMainHeart()`）：在 document `click` capture 阶段拦截 `[data-ga4-label="bookmark_button"]` 内的按钮（仅 artwork 路由 + 不在 `<nav>` 轮播 + 不在 `#pvm-author-panel`），`preventDefault + stopImmediatePropagation` 阻断 Pixiv 自身的"展开多图 / 跳收藏编辑"行为，改调 `author.addBookmark` / `author.removeBookmark`，本地维护 `state.currentBookmark`，并把心形 SVG 两条 path 的 `fill` 涂粉/还原。
+- 主图爱心拦截器（`hookMainHeart()`）：在 `window` 和 `document` 的 `pointerdown` / `mousedown` / `click` capture 阶段拦截主图爱心（兼容 `[data-ga4-label="bookmark_button"] button` 与 Pixiv 当前 `/bookmark_add.php?type=illust&illust_id=...` 链接形态；仅 artwork 路由 + 不在 `<nav>` 轮播 + 不在 `#pvm-author-panel`），`preventDefault + stopImmediatePropagation` 阻断 Pixiv 自身的"展开多图 / 跳收藏编辑"行为，改调 `author.addBookmark` / `author.removeBookmark`，本地维护 `state.currentBookmark`，并把心形 SVG path 的 `fill` 涂粉/还原；同一次点击的后续事件只阻断默认行为，不重复切换收藏。
 - 暴露 `apply()` / `scheduleApply(delay)` / `clear()` / `hookMainHeart()`。bootstrap 在路由切换、`MutationObserver` 触发的 DOM 变化和 `chrome.storage.onChanged` 中调用 `scheduleApply(0)`；`hookMainHeart()` 在模块加载时一次性挂上 capture 监听。
 
 ### `pvm-author-bootstrap.js`
@@ -195,11 +197,11 @@ Pixiv-Viewed-Marker/
 
 ### `author-panel.css`
 
-定义作品页悬浮 UI 和作者页网格增强样式：
+定义作品页作者作品速览 UI 和作者页网格增强样式：
 
-- 固定浮动面板。
-- 作者作品速览内部网格滚动。
-- 底部分页按钮固定。
+- 作品页作者作品速览的右侧栏嵌入样式和固定浮动回退样式。
+- `.pvm-artwork-layout-host` / `.pvm-artwork-side-rail` 在宽屏下扩展 Pixiv 右侧栏。
+- 作者作品速览内部网格、滑动翻页条、滚轮翻页提示和底部区域。
 - 当前作品遮罩。
 - 多图数量角标。
 - 作者页作品网格列数、等比缩放和动态行间距。
@@ -240,7 +242,7 @@ pvmAuthorPanelUi
 
 `pvmAuthorPanel:{userId}` 是作者作品速览缓存，包含作者作品 ID 索引、已加载作品详情和缓存时间。
 
-`pvmAuthorPanelUi` 是作品页作者速览悬浮面板状态，仅包含 `scaleIndex`（缩放档位）、`pageMode`（翻页模式）、`authorPanelExpanded`（是否展开）、`offsetX`（顶部文字拖动后的水平偏移）。**不再记忆位置**：收起态固定左下角，展开态固定右下角。
+`pvmAuthorPanelUi` 是作品页作者速览面板状态，包含 `scaleIndex`（缩放档位）、`pageMode`（`slider` / `wheel`；历史 `buttons` 会归一化为 `slider`）、`authorPanelExpanded`（固定浮动回退模式是否展开）、`offsetX`（固定浮动回退模式顶部文字拖动后的水平偏移）。**不再记忆位置**：固定浮动回退模式收起态固定左下角，展开态固定右下角；右侧栏嵌入模式自动显示。
 
 ## Background 模块
 
@@ -254,6 +256,6 @@ pvmAuthorPanelUi
 - 不依赖 Pixiv 的动态 class，优先依赖 URL 和稳定接口。
 - 页面扫描时不要在循环中访问 storage，必须先加载到内存 Set。
 - 作者作品速览依赖 Pixiv 网页端接口，接口变化时应保留 DOM 降级方案。
-- 面板内卡片用 bubble 阶段 `click` 监听做 SPA 跳转；中键 / Ctrl·Cmd+左键通过 background 调 `chrome.tabs.create` 后台打开，避免 `window.open` 强制前台、以及 Chrome 中键自动滚动模式导致的"按两次"。
+- 面板内卡片普通左键在 `mousedown` 阶段触发当前标签跳转，避免嵌入 Pixiv 右侧栏后懒加载重排吞掉第一次 `click`；中键 / Ctrl·Cmd+左键通过 background 调 `chrome.tabs.create` 后台打开，避免 `window.open` 强制前台、以及 Chrome 中键自动滚动模式导致的"按两次"。
 - 隐藏已访问作品不应作用到作者作品速览面板自身。
 - 作品页悬浮面板与作者页"已关注作者"等路由互斥：`getRouteContext` 的 userArtworks 正则要严格匹配 `/users/{id}` 和 `/users/{id}/(artworks|illustrations|manga)[/...]`，避免误命中 `/following`、`/followers`、`/bookmarks`。

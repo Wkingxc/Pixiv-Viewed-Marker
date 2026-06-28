@@ -100,6 +100,7 @@
         if (mutation.target?.parentElement?.closest?.("#pvm-author-hover-preview")) continue;
         if (Array.from(mutation.addedNodes).some((node) => node.id === "pvm-author-hover-preview" || node.closest?.("#pvm-author-hover-preview"))) continue;
         if (mutation.addedNodes.length > 0 || mutation.type === "characterData") {
+          author.artworkPanel?.remountPanelForCurrentRoute?.();
           author.authorPage?.scheduleUserArtworkEnhancements();
           author.artworkSections?.scheduleApply?.();
           return;
@@ -127,6 +128,7 @@
     window.addEventListener("scroll", () => author.hover?.hideHoverPreview(), true);
     window.addEventListener("resize", () => {
       author.hover?.hideHoverPreview();
+      author.artworkPanel?.remountPanelForCurrentRoute?.();
       author.artworkPanel.applyPanelUi();
       author.authorPage?.scheduleUserArtworkEnhancements(0);
     });

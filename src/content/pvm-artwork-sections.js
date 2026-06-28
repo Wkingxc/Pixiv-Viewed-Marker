@@ -131,26 +131,50 @@
   function hookMainHeart() {
     if (mainHeartHooked) return;
     mainHeartHooked = true;
-    document.addEventListener("click", onDocumentClickCapture, true);
+    ["pointerdown", "mousedown", "click"].forEach((type) => {
+      window.addEventListener(type, onMainHeartEventCapture, true);
+      document.addEventListener(type, onMainHeartEventCapture, true);
+    });
   }
 
-  function onDocumentClickCapture(event) {
+  function findMainHeartControl(target) {
+    const wrapper = target.closest('[data-ga4-label="bookmark_button"]');
+    if (wrapper) {
+      const button = wrapper.querySelector("button");
+      if (button) return button;
+    }
+
+    const link = target.closest('a[href^="/bookmark_add.php"]');
+    if (!link) return null;
+    const href = link.getAttribute("href") || "";
+    if (!/[?&]type=illust(?:&|$)/.test(href) || !/[?&]illust_id=\d+(?:&|$)/.test(href)) return null;
+    return link;
+  }
+
+  let lastMainHeartEventAt = 0;
+  function onMainHeartEventCapture(event) {
     const routeContext = author.getRouteContext();
     if (routeContext?.type !== "artwork") return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest("#pvm-author-panel")) return;
     if (target.closest("nav")) return;
-    const wrapper = target.closest('[data-ga4-label="bookmark_button"]');
-    if (!wrapper) return;
-    const button = wrapper.querySelector("button");
+    const button = findMainHeartControl(target);
     if (!button) return;
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
 
-    void toggleMainBookmark(routeContext.artworkId, button);
+    if (event.type !== "click") {
+      lastMainHeartEventAt = Date.now();
+      void toggleMainBookmark(routeContext.artworkId, button);
+      return;
+    }
+
+    if (Date.now() - lastMainHeartEventAt > 600) {
+      void toggleMainBookmark(routeContext.artworkId, button);
+    }
   }
 
   let mainToggleInFlight = false;

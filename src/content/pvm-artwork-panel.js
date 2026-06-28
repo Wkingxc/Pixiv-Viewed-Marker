@@ -7,6 +7,11 @@
   let toggle = null;
   let wheelPagingLocked = false;
 
+  const LAYOUT_HOST_CLASS = "pvm-artwork-layout-host";
+  const SIDE_RAIL_CLASS = "pvm-artwork-side-rail";
+  let markedLayoutHost = null;
+  let markedSideRail = null;
+
   // 常驻入口图标：粉色圆形 + 画廊缩略图 SVG
   const TOGGLE_ICON_SVG = `<svg class="pvm-ap-toggle-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <rect x="6.5" y="4.5" width="13" height="13" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.55"/>
@@ -15,7 +20,127 @@
     <path d="M5 17 L9 13 L12 16 L14.5 14 L15 17 Z" fill="rgba(255,255,255,0.92)"/>
   </svg>`;
 
-  // --- 面板创建 / 缩放 / 偏移 --------------------------------------------
+  // --- 面板挂载 / 缩放 / 偏移 --------------------------------------------
+  function queryAll(root, selector) {
+    try { return Array.from(root?.querySelectorAll?.(selector) || []); }
+    catch (_) { return []; }
+  }
+
+  function uniqueNodes(nodes) {
+    return Array.from(new Set(nodes.filter(Boolean)));
+  }
+
+  function isPanelNode(node) {
+    return node?.id === "pvm-author-panel" || Boolean(node?.closest?.("#pvm-author-panel"));
+  }
+
+  function countArtworkLinks(node) {
+    return queryAll(node, 'a[href*="/artworks/"]').filter((anchor) => !isPanelNode(anchor)).length;
+  }
+
+  function isDocumentShell(node) {
+    const name = node?.localName || node?.tagName?.toLowerCase?.() || "";
+    return name === "html" || name === "body" || name === "main";
+  }
+
+  function isLikelyPixivRightRail(node) {
+    if (!node || isPanelNode(node)) return false;
+    const name = node.localName || node.tagName?.toLowerCase?.() || "";
+    if (name !== "aside") return false;
+    let sibling = node.parentElement?.firstElementChild;
+    while (sibling) {
+      const siblingName = sibling.localName || sibling.tagName?.toLowerCase?.() || "";
+      if (siblingName === "main") return true;
+      sibling = sibling.nextElementSibling;
+    }
+    const siblings = Array.from(node.parentElement?.children || []);
+    return siblings.some((child) => (child.localName || child.tagName?.toLowerCase?.() || "") === "main");
+  }
+
+  function isUsableEmbedHost(node) {
+    if (!node || isPanelNode(node) || isDocumentShell(node)) return false;
+    return countArtworkLinks(node) >= 2 || isLikelyPixivRightRail(node);
+  }
+
+  function findSemanticHost(root = document) {
+    const candidates = uniqueNodes([
+      ...queryAll(root, "aside"),
+      ...queryAll(root, '[role="complementary"]')
+    ]).filter(isUsableEmbedHost);
+    candidates.sort((a, b) => {
+      const aIsRail = isLikelyPixivRightRail(a);
+      const bIsRail = isLikelyPixivRightRail(b);
+      if (aIsRail !== bIsRail) return aIsRail ? -1 : 1;
+      return countArtworkLinks(b) - countArtworkLinks(a);
+    });
+    return candidates[0] || null;
+  }
+
+  function findEmbedHost(root = document) {
+    const semantic = findSemanticHost(root);
+    if (semantic) return { host: semantic, mode: "right-rail" };
+    return null;
+  }
+
+  function markLayoutHost(host, mode) {
+    clearLayoutMarks();
+    if (mode !== "right-rail" || !host?.parentElement) return;
+    markedLayoutHost = host.parentElement;
+    markedSideRail = host;
+    markedLayoutHost.classList.add(LAYOUT_HOST_CLASS);
+    markedSideRail.classList.add(SIDE_RAIL_CLASS);
+  }
+
+  function clearLayoutMarks() {
+    markedLayoutHost?.classList?.remove?.(LAYOUT_HOST_CLASS);
+    markedSideRail?.classList?.remove?.(SIDE_RAIL_CLASS);
+    markedLayoutHost = null;
+    markedSideRail = null;
+  }
+
+  function placePanel(host, mode) {
+    if (!panel || !host) return;
+    if (panel.parentElement !== host) {
+      if (typeof host.prepend === "function") host.prepend(panel);
+      else host.insertBefore?.(panel, host.firstChild || null);
+    } else if (host.firstElementChild && host.firstElementChild !== panel) {
+      host.insertBefore?.(panel, host.firstElementChild);
+    }
+    panel.dataset.mountMode = mode;
+    panel.classList.add("is-embedded");
+    panel.classList.remove("is-fixed-fallback");
+    markLayoutHost(host, mode);
+  }
+
+  function placeFixedFallback() {
+    if (!panel) return;
+    clearLayoutMarks();
+    if (panel.parentElement !== document.documentElement) document.documentElement.append(panel);
+    panel.dataset.mountMode = "fixed-fallback";
+    panel.classList.remove("is-embedded");
+    panel.classList.add("is-fixed-fallback");
+  }
+
+  function remountPanelForCurrentRoute() {
+    if (!panel) return findEmbedHost(document);
+    const routeContext = author.getCurrentRouteContext();
+    if (routeContext?.type !== "artwork") {
+      clearLayoutMarks();
+      return null;
+    }
+    const target = findEmbedHost(document);
+    if (target?.host) {
+      placePanel(target.host, target.mode);
+      return target;
+    }
+    placeFixedFallback();
+    return null;
+  }
+
+  function isEmbeddedPanel() {
+    return Boolean(panel?.classList?.contains("is-embedded"));
+  }
+
   function applyPanelUi() {
     if (!panel) return;
     const uiState = author.getUiState();
@@ -30,6 +155,7 @@
     panel.id = "pvm-author-panel";
     document.documentElement.append(panel);
     applyPanelUi();
+    remountPanelForCurrentRoute();
     panel.addEventListener("wheel", handlePanelWheel, { passive: false });
     return panel;
   }
@@ -84,8 +210,8 @@
         data-action="toggle-page-mode"
         type="button"
         aria-pressed="${isWheelMode ? "true" : "false"}"
-        title="${isWheelMode ? "当前为滚轮翻页" : "当前为按钮翻页"}"
-      >${isWheelMode ? "滚轮翻页" : "按钮翻页"}</button>
+        title="${isWheelMode ? "当前为滚轮翻页" : "当前为滑动翻页"}"
+      >${isWheelMode ? "滚轮翻页" : "滑动翻页"}</button>
     `;
   }
 
@@ -102,13 +228,14 @@
       `;
     }
     return `
-      <div class="pvm-ap-footer">
+      <div class="pvm-ap-footer pvm-ap-footer-slider">
         <div class="pvm-ap-footer-left">
-          <button class="pvm-ap-btn" data-action="prev" type="button" ${state.page === 0 ? "disabled" : ""}>上一页</button>
           ${showCurrentButton ? '<button class="pvm-ap-btn" data-action="current" type="button">定位</button>' : ""}
+          <span class="pvm-ap-page">${state.page + 1} / ${totalPages}</span>
         </div>
-        <span class="pvm-ap-page">${state.page + 1} / ${totalPages}</span>
-        <button class="pvm-ap-btn" data-action="next" type="button" ${state.page >= totalPages - 1 ? "disabled" : ""}>下一页</button>
+        <div class="pvm-ap-slider-row">
+          <input class="pvm-ap-page-slider" data-action="page-slider" type="range" min="1" max="${totalPages}" value="${state.page + 1}" aria-label="滑动翻页">
+        </div>
       </div>
     `;
   }
@@ -165,17 +292,28 @@
       return;
     }
 
-    // 作品页：收起态只显示图标，不渲染面板
-    if (!isExpanded()) {
+    // 嵌入模式是页面内容的一部分，不再依赖左下角悬浮入口。
+    const embedTarget = findEmbedHost(document);
+    if (embedTarget?.host && !isExpanded()) {
+      const target = ensurePanel();
+      placePanel(embedTarget.host, embedTarget.mode);
+      target.hidden = false;
+      updateToggleState(false);
+      if (toggle) toggle.hidden = true;
+      applyPanelUi();
+    } else if (!isExpanded()) {
       if (panel) panel.hidden = true;
       updateToggleState(false);
       return;
+    } else {
+      updateToggleState(true);
+      const target = ensurePanel();
+      remountPanelForCurrentRoute();
+      target.hidden = false;
+      applyPanelUi();
     }
 
-    updateToggleState(true);
-    const target = ensurePanel();
-    target.hidden = false;
-    applyPanelUi();
+    const target = panel;
 
     const state = author.getState();
     if (state.loading) {
@@ -232,6 +370,7 @@
 
   // --- 横向拖动（仅左右） -------------------------------------------------
   function bindHorizontalDrag() {
+    if (isEmbeddedPanel()) return;
     const handle = panel.querySelector(".pvm-ap-current");
     if (!handle || handle.dataset.pvmDragBound === "true") return;
     handle.dataset.pvmDragBound = "true";
@@ -279,13 +418,21 @@
     if (!panel) return;
     bindHorizontalDrag();
     panel.querySelectorAll(".pvm-ap-card").forEach((card) => {
-      // 左键单击：SPA 跳转
-      card.addEventListener("click", (event) => {
-        if (event.button !== 0) return;
-        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const navigateInCurrentTab = (event) => {
         event.preventDefault();
         event.stopPropagation();
         window.location.assign(card.href);
+      };
+      // 左键单击：在 mousedown 阶段先触发 SPA 跳转，避免 Pixiv 懒加载重排吞掉 click。
+      card.addEventListener("mousedown", (event) => {
+        if (event.button !== 0) return;
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        navigateInCurrentTab(event);
+      });
+      card.addEventListener("click", (event) => {
+        if (event.button !== 0) return;
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        navigateInCurrentTab(event);
       });
       // 中键 / Ctrl·Cmd+左键：通过 background 用 chrome.tabs.create 强制后台新标签打开
       const openInBackgroundTab = (event) => {
@@ -306,13 +453,24 @@
       });
     });
 
+    panel.querySelectorAll('[data-action="page-slider"]').forEach((slider) => {
+      const updateFromSlider = async (event) => {
+        const totalPages = getTotalPages();
+        const nextPage = Math.min(Math.max(Number(event.target.value || 1) - 1, 0), totalPages - 1);
+        const state = author.getState();
+        if (state.page === nextPage) return;
+        state.page = nextPage;
+        await renderPanel();
+      };
+      slider.addEventListener("input", updateFromSlider);
+      slider.addEventListener("change", updateFromSlider);
+    });
+
     panel.querySelectorAll("[data-action]").forEach((button) => {
       button.addEventListener("click", async (event) => {
         event.preventDefault();
         const action = button.dataset.action;
         const state = author.getState();
-        if (action === "prev") state.page -= 1;
-        if (action === "next") state.page += 1;
         if (action === "current") state.page = author.currentPageFor(state.ids, author.getCurrentArtworkId());
         if (action === "scale-down" || action === "scale-up") {
           const direction = action === "scale-up" ? 1 : -1;
@@ -333,7 +491,7 @@
         }
         if (action === "toggle-page-mode") {
           author.patchUiState({
-            pageMode: author.getUiState().pageMode === "wheel" ? "buttons" : "wheel"
+            pageMode: author.getUiState().pageMode === "wheel" ? "slider" : "wheel"
           });
           author.saveUiState();
           await renderPanel();
@@ -368,6 +526,8 @@
 
   artworkPanel.renderPanel = renderPanel;
   artworkPanel.applyPanelUi = applyPanelUi;
+  artworkPanel.remountPanelForCurrentRoute = remountPanelForCurrentRoute;
+  artworkPanel.findEmbedHost = findEmbedHost;
   artworkPanel.setPanelExpanded = setPanelExpanded;
   artworkPanel.getPanel = () => panel;
   artworkPanel.getToggle = () => toggle;
