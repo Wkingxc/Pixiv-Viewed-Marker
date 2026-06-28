@@ -193,6 +193,67 @@ input[type="range"] {
   font-weight: 800;
 }
 
+.stepper-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.stepper-label {
+  display: grid;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stepper-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stepper-btn:hover:not(:disabled) {
+  color: white;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.stepper-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.stepper-value {
+  width: 52px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 4px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  font-weight: 800;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.stepper-value::-webkit-outer-spin-button,
+.stepper-value::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .author-card {
   display: grid;
   gap: 13px;

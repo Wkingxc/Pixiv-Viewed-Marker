@@ -14,7 +14,9 @@
     authorPageGridColumns: 6,
     authorPageMinPageCount: 0,
     authorPageUseHighResThumbnails: false,
+    authorPageHighResThumbnailQuality: "original",
     authorPageHoverPreviewEnabled: false,
+    authorPageHoverPreviewQuality: "off",
     markUserName: false,
     importBookmarkAddUrls: false
   };

@@ -10,6 +10,8 @@
   const overlayOpacityEl = document.getElementById("overlayOpacity");
   const overlayValueEl = document.getElementById("overlayValue");
   const authorGridColumnsEl = document.getElementById("authorGridColumns");
+  const authorGridDecrementEl = document.querySelector('[data-action="grid-decrement"]');
+  const authorGridIncrementEl = document.querySelector('[data-action="grid-increment"]');
   const authorMinPageCountEl = document.getElementById("authorMinPageCount");
   const authorHighResEl = document.getElementById("authorHighRes");
   const authorHoverPreviewEl = document.getElementById("authorHoverPreview");
@@ -59,6 +61,24 @@
     authorMinPageCountEl.value = String(clampNumber(settings.authorPageMinPageCount, 0, 999, 0));
     authorHighResEl.checked = Boolean(settings.authorPageUseHighResThumbnails);
     authorHoverPreviewEl.checked = Boolean(settings.authorPageHoverPreviewEnabled);
+    updateGridStepperState();
+  }
+
+  function updateGridStepperState() {
+    const value = clampNumber(authorGridColumnsEl.value, 2, 6, 6);
+    authorGridDecrementEl.disabled = value <= 2;
+    authorGridIncrementEl.disabled = value >= 6;
+  }
+
+  function adjustGridColumns(delta) {
+    const next = clampNumber(Number(authorGridColumnsEl.value) + delta, 2, 6, 6);
+    if (String(next) === authorGridColumnsEl.value) {
+      updateGridStepperState();
+      return;
+    }
+    authorGridColumnsEl.value = String(next);
+    updateGridStepperState();
+    scheduleSettingsSave();
   }
 
   function renderExcludedPages(target, records) {
@@ -115,15 +135,18 @@
         authorPageGridColumns: clampNumber(authorGridColumnsEl.value, 2, 6, 6),
         authorPageMinPageCount: clampNumber(authorMinPageCountEl.value, 0, 999, 0),
         authorPageUseHighResThumbnails: authorHighResEl.checked,
-        authorPageHoverPreviewEnabled: authorHoverPreviewEl.checked
+        authorPageHighResThumbnailQuality: "original",
+        authorPageHoverPreviewEnabled: authorHoverPreviewEl.checked,
+        authorPageHoverPreviewQuality: authorHoverPreviewEl.checked ? "original" : "off"
       };
 
       currentData.settings = await PVM.storage.saveSettings(settings);
       authorGridColumnsEl.value = String(currentData.settings.authorPageGridColumns);
       authorMinPageCountEl.value = String(currentData.settings.authorPageMinPageCount);
+      updateGridStepperState();
       colorValueEl.textContent = visitedColorEl.value.toUpperCase();
       overlayValueEl.textContent = `${Math.round(Number(overlayOpacityEl.value) * 100)}%`;
-      setStatus("标记设置已保存。");
+      setStatus("设置已保存。");
     }, 180);
   }
 
@@ -221,17 +244,35 @@
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach((item) => item.classList.remove("is-active"));
-      document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.remove("is-active"));
-      tab.classList.add("is-active");
-      document.getElementById(`tab-${tab.dataset.tab}`).classList.add("is-active");
+      activateTab(tab.dataset.tab);
     });
   });
+
+  function activateTab(name) {
+    document.querySelectorAll(".tab").forEach((item) => item.classList.toggle("is-active", item.dataset.tab === name));
+    document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.toggle("is-active", panel.id === `tab-${name}`));
+  }
+
+  async function autoSelectTabForActiveTab() {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const url = tabs?.[0]?.url || "";
+      const parsed = PVM.parsePixivUrl(url);
+      if (parsed?.type === "user") activateTab("author");
+    } catch (_error) {
+      // ignore: 没有标签权限或非 Pixiv 页面，保持默认 tab。
+    }
+  }
+
+  autoSelectTabForActiveTab();
 
   [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl, authorGridColumnsEl, authorMinPageCountEl, authorHighResEl, authorHoverPreviewEl].forEach((control) => {
     control.addEventListener("input", scheduleSettingsSave);
     control.addEventListener("change", scheduleSettingsSave);
   });
+
+  authorGridDecrementEl.addEventListener("click", () => adjustGridColumns(-1));
+  authorGridIncrementEl.addEventListener("click", () => adjustGridColumns(1));
 
   excludeFormEl.addEventListener("submit", (event) => {
     handleExcludeSubmit(event).catch((error) => setStatus(error.message || "排除失败。"));

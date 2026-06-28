@@ -10,6 +10,26 @@
   const HOME_GRID_CLASS = "pvm-author-home-grid";
   const HOME_HIDDEN_CLASS = "pvm-hidden-page-count-artwork";
 
+  const HOVER_PREVIEW_QUALITIES = ["off", "small", "medium", "original"];
+  const HOVER_PREVIEW_QUALITY_LABELS = {
+    off: "关闭",
+    small: "small（540 长边）",
+    medium: "medium（1200 长边）",
+    original: "original（原图）"
+  };
+  const HIGH_RES_QUALITIES = ["small", "medium", "original"];
+  const HIGH_RES_QUALITY_LABELS = {
+    small: "small（540 长边）",
+    medium: "medium（1200 长边）",
+    original: "original（原图）"
+  };
+  // 把简化档位名映射到 Pixiv /ajax/illust 返回的 urls 字段。
+  const QUALITY_URL_KEY = {
+    small: "small",
+    medium: "regular",
+    original: "original"
+  };
+
   let panel = null;
   let currentArtworkId = null;
   let currentRouteContext = null;
@@ -22,6 +42,8 @@
   let hoverPreviewTimer = null;
   let hoverPreviewToken = 0;
   const hoverPreviewCache = new Map();
+  // 缓存 /ajax/illust/{id} 返回的 urls 字段，供高清缩略图按档位即时切换。
+  const highResUrlsCache = new Map();
   let settings = { ...PVM.DEFAULT_SETTINGS };
   let state = {
     ids: [],
@@ -35,6 +57,8 @@
   let uiState = {
     left: null,
     top: null,
+    collapsedLeft: null,
+    collapsedTop: null,
     scaleIndex: 0,
     pageMode: "buttons",
     authorPanelExpanded: false
@@ -81,33 +105,60 @@
     );
   }
 
-  function pickPreviewImage(work) {
+  function resolveQualityUrl(urls, quality) {
+    if (!urls || !quality || quality === "off") return "";
+    const key = QUALITY_URL_KEY[quality];
+    if (key && typeof urls[key] === "string" && urls[key]) return urls[key];
+    return "";
+  }
+
+  function pickPreviewImage(work, quality) {
+    const urls = work?.urls || {};
+    const direct = resolveQualityUrl(urls, quality);
+    if (direct) return direct;
     return (
-      work.urls?.original ||
-      work.urls?.regular ||
-      work.urls?.small ||
+      urls.original ||
+      urls.regular ||
+      urls.small ||
       work.url ||
-      work.urls?.thumb_mini ||
+      urls.thumb ||
+      urls.thumb_mini ||
+      urls.mini ||
       work.thumbnail ||
       work.thumbnailUrl ||
       ""
     );
   }
 
-  function pickHighResImage(work) {
+  function collectAvailableUrls(work) {
+    const urls = work?.urls || {};
+    const available = {};
+    Object.keys(urls).forEach((key) => {
+      if (typeof urls[key] === "string" && urls[key]) available[key] = urls[key];
+    });
+    if (work?.url && !available.regular) available.url = work.url;
+    return available;
+  }
+
+  function pickHighResImage(work, quality) {
+    const urls = work?.urls || {};
+    const direct = resolveQualityUrl(urls, quality);
+    if (direct) return direct;
     return (
-      work.urls?.regular ||
-      work.urls?.small ||
+      urls.regular ||
+      urls.small ||
       work.url ||
-      work.urls?.thumb_mini ||
+      urls.thumb ||
+      urls.thumb_mini ||
+      urls.mini ||
       work.thumbnail ||
       work.thumbnailUrl ||
       ""
     );
   }
 
-  function pickHighResImageSet(work) {
-    const image = pickHighResImage(work);
+  function pickHighResImageSet(work, quality) {
+    const image = pickHighResImage(work, quality);
     if (!image) return "";
     return `${image} 1x, ${image} 2x`;
   }
@@ -117,8 +168,10 @@
       id: String(work.id || id),
       title: work.title || "Untitled",
       image: pickImage(work),
-      highResImage: pickHighResImage(work),
-      highResImageSet: pickHighResImageSet(work),
+      urls: work.urls && typeof work.urls === "object" ? { ...work.urls } : {},
+      url: work.url || "",
+      highResImage: pickHighResImage(work, "small"),
+      highResImageSet: pickHighResImageSet(work, "small"),
       highResImageChecked: true,
       pageCount: Number(work.pageCount || work.page_count || 1),
       createDate: work.createDate || work.create_date || "",
@@ -155,6 +208,8 @@
     return {
       left: Number.isFinite(raw?.left) ? raw.left : null,
       top: Number.isFinite(raw?.top) ? raw.top : null,
+      collapsedLeft: Number.isFinite(raw?.collapsedLeft) ? raw.collapsedLeft : null,
+      collapsedTop: Number.isFinite(raw?.collapsedTop) ? raw.collapsedTop : null,
       scaleIndex,
       pageMode,
       authorPanelExpanded: raw?.authorPanelExpanded === true
@@ -177,13 +232,28 @@
   }
 
   function normalizeAuthorSettings(raw = {}) {
+    const hoverEnabled = raw.authorPageHoverPreviewEnabled === true;
+    const rawHoverQuality = typeof raw.authorPageHoverPreviewQuality === "string"
+      ? raw.authorPageHoverPreviewQuality
+      : (hoverEnabled ? "original" : "off");
+    let hoverQuality = HOVER_PREVIEW_QUALITIES.includes(rawHoverQuality) ? rawHoverQuality : "off";
+    if (hoverEnabled && hoverQuality === "off") hoverQuality = "original";
+    if (!hoverEnabled) hoverQuality = "off";
+
+    const rawHighResQuality = typeof raw.authorPageHighResThumbnailQuality === "string"
+      ? raw.authorPageHighResThumbnailQuality
+      : "original";
+    const highResQuality = HIGH_RES_QUALITIES.includes(rawHighResQuality) ? rawHighResQuality : "original";
+
     return {
       ...PVM.DEFAULT_SETTINGS,
       ...(raw || {}),
       authorPageGridColumns: clampNumber(raw.authorPageGridColumns, HOME_GRID_MIN_COLUMNS, HOME_GRID_MAX_COLUMNS, 6),
       authorPageMinPageCount: clampNumber(raw.authorPageMinPageCount, 0, HOME_MIN_PAGE_MAX, 0),
       authorPageUseHighResThumbnails: raw.authorPageUseHighResThumbnails === true,
-      authorPageHoverPreviewEnabled: raw.authorPageHoverPreviewEnabled === true
+      authorPageHighResThumbnailQuality: highResQuality,
+      authorPageHoverPreviewEnabled: hoverEnabled,
+      authorPageHoverPreviewQuality: hoverQuality
     };
   }
 
@@ -239,13 +309,19 @@
 
     panel.style.setProperty("--pvm-ap-scale", String(SCALE_STEPS[uiState.scaleIndex]));
 
-    if (Number.isFinite(uiState.left) && Number.isFinite(uiState.top)) {
-      const next = clampPanelPosition(uiState.left, uiState.top);
+    const isCollapsed = panel.classList.contains("is-collapsed");
+    const left = isCollapsed ? uiState.collapsedLeft : uiState.left;
+    const top = isCollapsed ? uiState.collapsedTop : uiState.top;
+    const leftKey = isCollapsed ? "collapsedLeft" : "left";
+    const topKey = isCollapsed ? "collapsedTop" : "top";
+
+    if (Number.isFinite(left) && Number.isFinite(top)) {
+      const next = clampPanelPosition(left, top);
       panel.style.left = `${next.left}px`;
       panel.style.top = `${next.top}px`;
       panel.style.right = "auto";
-      if (next.left !== uiState.left || next.top !== uiState.top) {
-        uiState = { ...uiState, ...next };
+      if (next.left !== left || next.top !== top) {
+        uiState = { ...uiState, [leftKey]: next.left, [topKey]: next.top };
         if (persistClamp) saveUiState();
       }
       return;
@@ -289,19 +365,31 @@
     };
   }
 
-  async function fetchArtworkPreview(artworkId) {
+  async function fetchArtworkPreview(artworkId, quality) {
     const id = String(artworkId);
-    if (hoverPreviewCache.has(id)) return hoverPreviewCache.get(id);
+    const cacheKey = `${id}:${quality}`;
+    if (hoverPreviewCache.has(cacheKey)) return hoverPreviewCache.get(cacheKey);
 
     let result = null;
+    let availableUrls = {};
     try {
       const body = await fetchJson(`/ajax/illust/${id}`);
-      const image = pickPreviewImage(body);
+      availableUrls = collectAvailableUrls(body);
+      const direct = resolveQualityUrl(body.urls, quality);
+      const image = direct || pickPreviewImage(body, quality);
       if (image) {
+        let actualQuality = quality;
+        if (!direct) {
+          const matched = Object.keys(body.urls || {}).find((key) => body.urls[key] === image);
+          actualQuality = matched || "fallback";
+        }
         result = {
           id,
           title: body.title || state.workMap[id]?.title || `Artwork ${id}`,
-          image
+          image,
+          quality,
+          actualQuality,
+          availableUrls
         };
       }
     } catch (error) {
@@ -311,10 +399,17 @@
     if (!result) {
       const fallback = state.workMap[id];
       const image = fallback?.highResImage || fallback?.image || "";
-      result = image ? { id, title: fallback?.title || `Artwork ${id}`, image } : null;
+      result = image ? {
+        id,
+        title: fallback?.title || `Artwork ${id}`,
+        image,
+        quality,
+        actualQuality: "fallback",
+        availableUrls
+      } : null;
     }
 
-    hoverPreviewCache.set(id, result);
+    hoverPreviewCache.set(cacheKey, result);
     return result;
   }
 
@@ -461,6 +556,9 @@
     return panel;
   }
 
+  const COLLAPSE_ICON_EXPANDED = `<svg class="pvm-ap-collapse-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  const COLLAPSE_ICON_COLLAPSED = `<svg class="pvm-ap-collapse-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4.5" y="4.5" width="6" height="6" rx="1.4" fill="currentColor"/><rect x="13.5" y="4.5" width="6" height="6" rx="1.4" fill="currentColor"/><rect x="4.5" y="13.5" width="6" height="6" rx="1.4" fill="currentColor"/><rect x="13.5" y="13.5" width="6" height="6" rx="1.4" fill="currentColor"/></svg>`;
+
   function setPanelCollapsed(isCollapsed) {
     if (!panel) return;
     panel.classList.toggle("is-collapsed", Boolean(isCollapsed));
@@ -476,12 +574,13 @@
     button.setAttribute("title", nextCollapsed ? "展开作者作品速览" : "收起作者作品速览");
     const icon = button.querySelector(".pvm-ap-collapse-icon");
     const label = button.querySelector(".pvm-ap-collapse-label");
-    if (icon) icon.textContent = nextCollapsed ? "▦" : "×";
+    if (icon) icon.innerHTML = nextCollapsed ? COLLAPSE_ICON_COLLAPSED : COLLAPSE_ICON_EXPANDED;
     if (label) label.textContent = nextCollapsed ? "展开" : "收起";
   }
 
   function renderCollapseButton() {
     const isCollapsed = panel?.classList.contains("is-collapsed");
+    const iconSvg = isCollapsed ? COLLAPSE_ICON_COLLAPSED : COLLAPSE_ICON_EXPANDED;
     return `
       <button
         class="pvm-ap-btn pvm-ap-collapse-btn"
@@ -490,7 +589,7 @@
         aria-label="${isCollapsed ? "展开作者作品速览" : "收起作者作品速览"}"
         title="${isCollapsed ? "展开作者作品速览" : "收起作者作品速览"}"
       >
-        <span class="pvm-ap-collapse-icon" aria-hidden="true">${isCollapsed ? "▦" : "×"}</span>
+        <span class="pvm-ap-collapse-icon" aria-hidden="true">${iconSvg}</span>
         <span class="pvm-ap-collapse-label">${isCollapsed ? "展开" : "收起"}</span>
       </button>
     `;
@@ -742,7 +841,10 @@
     if (dragState.moved) event.preventDefault();
 
     const next = clampElementPosition(dragState.target, dragState.startLeft + deltaX, dragState.startTop + deltaY);
-    uiState = { ...uiState, left: next.left, top: next.top };
+    const isCollapsed = dragState.target === panel && panel.classList.contains("is-collapsed");
+    const leftKey = isCollapsed ? "collapsedLeft" : "left";
+    const topKey = isCollapsed ? "collapsedTop" : "top";
+    uiState = { ...uiState, [leftKey]: next.left, [topKey]: next.top };
     dragState.target.style.left = `${next.left}px`;
     dragState.target.style.top = `${next.top}px`;
     dragState.target.style.right = "auto";
@@ -886,12 +988,46 @@
     const target = ensureHoverPreview();
     target.classList.add("has-image");
     target.classList.remove("is-error");
+    const requested = HOVER_PREVIEW_QUALITY_LABELS[preview.quality] || preview.quality || "?";
+    const actual = preview.actualQuality && preview.actualQuality !== preview.quality
+      ? `（实际：${HOVER_PREVIEW_QUALITY_LABELS[preview.actualQuality] || preview.actualQuality}）`
+      : "";
+    const availableKeys = Object.keys(preview.availableUrls || {});
+    const availableLine = availableKeys.length
+      ? `<div class="pvm-ahp-meta">可用：${availableKeys.map((key) => escapeHtml(key)).join(" / ")}</div>`
+      : "";
     target.innerHTML = `
       <img class="pvm-ahp-image" src="${escapeAttr(preview.image)}" alt="">
       <div class="pvm-ahp-caption">${escapeHtml(preview.title || "预览")}</div>
+      <div class="pvm-ahp-meta">档位：${escapeHtml(requested)}${escapeHtml(actual)}</div>
+      <div class="pvm-ahp-meta pvm-ahp-dimensions" data-pvm-dimensions>尺寸：加载中…</div>
+      <div class="pvm-ahp-meta pvm-ahp-url" title="${escapeAttr(preview.image)}">URL：${escapeHtml(shortenUrl(preview.image))}</div>
+      ${availableLine}
     `;
     target.hidden = false;
     positionHoverPreview(event);
+
+    const img = target.querySelector(".pvm-ahp-image");
+    const dimsEl = target.querySelector("[data-pvm-dimensions]");
+    if (img && dimsEl) {
+      const updateDims = () => {
+        if (img.naturalWidth && img.naturalHeight) {
+          dimsEl.textContent = `尺寸：${img.naturalWidth} × ${img.naturalHeight}`;
+        } else {
+          dimsEl.textContent = "尺寸：未知";
+        }
+      };
+      if (img.complete) updateDims();
+      else {
+        img.addEventListener("load", updateDims, { once: true });
+        img.addEventListener("error", () => { dimsEl.textContent = "尺寸：加载失败"; }, { once: true });
+      }
+    }
+  }
+
+  function shortenUrl(url) {
+    if (typeof url !== "string" || url.length <= 72) return url || "";
+    return `${url.slice(0, 40)}…${url.slice(-28)}`;
   }
 
   function hideHoverPreview() {
@@ -906,13 +1042,14 @@
   }
 
   function startHoverPreview(entry, event) {
-    if (!settings.authorPageHoverPreviewEnabled) return;
+    const quality = settings.authorPageHoverPreviewQuality;
+    if (!quality || quality === "off") return;
     window.clearTimeout(hoverPreviewTimer);
     const token = hoverPreviewToken + 1;
     hoverPreviewToken = token;
     hoverPreviewTimer = window.setTimeout(async () => {
-      renderHoverPreview("加载预览中…", event);
-      const preview = await fetchArtworkPreview(entry.id);
+      renderHoverPreview(`加载预览中… (${HOVER_PREVIEW_QUALITY_LABELS[quality] || quality})`, event);
+      const preview = await fetchArtworkPreview(entry.id, quality);
       if (token !== hoverPreviewToken) return;
       if (!preview?.image) {
         const target = ensureHoverPreview();
@@ -927,7 +1064,7 @@
   }
 
   function bindHoverPreviewEntry(entry) {
-    if (!settings.authorPageHoverPreviewEnabled) return;
+    if (!settings.authorPageHoverPreviewQuality || settings.authorPageHoverPreviewQuality === "off") return;
     if (!entry?.card || entry.card.dataset.pvmHoverPreviewBound === "true") return;
     entry.card.dataset.pvmHoverPreviewBound = "true";
     entry.card.addEventListener("pointerenter", (event) => startHoverPreview(entry, event));
@@ -936,7 +1073,7 @@
   }
 
   function applyHoverPreviewBindings(entries) {
-    if (!settings.authorPageHoverPreviewEnabled) {
+    if (!settings.authorPageHoverPreviewQuality || settings.authorPageHoverPreviewQuality === "off") {
       hideHoverPreview();
       return;
     }
@@ -1008,14 +1145,47 @@
     root.querySelectorAll?.('source[data-pvm-high-res-source-touched="true"]').forEach(restoreHighResSource);
   }
 
+  async function fetchHighResUrls(id) {
+    const key = String(id);
+    if (highResUrlsCache.has(key)) return highResUrlsCache.get(key);
+    const promise = (async () => {
+      try {
+        const body = await fetchJson(`/ajax/illust/${key}`);
+        return body?.urls && typeof body.urls === "object" ? body.urls : {};
+      } catch (error) {
+        console.warn("[PVM] Failed to fetch high-res urls for", key, error);
+        return {};
+      }
+    })();
+    highResUrlsCache.set(key, promise);
+    return promise;
+  }
+
+  async function ensureHighResUrlsForEntry(entry, quality) {
+    const work = state.workMap[entry.id];
+    if (!work) return null;
+    if (resolveQualityUrl(work.urls, quality)) return work.urls;
+
+    const urls = await fetchHighResUrls(entry.id);
+    if (!urls || Object.keys(urls).length === 0) return work.urls || null;
+    state.workMap[entry.id] = {
+      ...work,
+      urls: { ...(work.urls || {}), ...urls }
+    };
+    return state.workMap[entry.id].urls;
+  }
+
   function applyHighResImageToEntry(entry) {
-    const highResImage = state.workMap[entry.id]?.highResImage;
+    const quality = settings.authorPageHighResThumbnailQuality;
+    const work = state.workMap[entry.id];
+    if (!work) return;
+    const highResImage = pickHighResImage(work, quality);
     if (!highResImage) return;
 
     const img = getEntryImage(entry);
     if (!img || img.closest("#pvm-author-panel")) return;
 
-    const highResImageSet = state.workMap[entry.id]?.highResImageSet || `${highResImage} 1x, ${highResImage} 2x`;
+    const highResImageSet = pickHighResImageSet(work, quality) || `${highResImage} 1x, ${highResImage} 2x`;
     const alreadyApplied = img.dataset.pvmHighResImageUrl === highResImage
       && img.getAttribute("src") === highResImage
       && img.getAttribute("srcset") === highResImageSet;
@@ -1120,6 +1290,10 @@
       }
 
       if (useHighResThumbnails) {
+        const highResQuality = settings.authorPageHighResThumbnailQuality;
+        if (highResQuality === "medium" || highResQuality === "original") {
+          await Promise.all(entries.map((entry) => ensureHighResUrlsForEntry(entry, highResQuality)));
+        }
         entries.forEach(applyHighResImageToEntry);
       } else {
         restoreUserArtworkCardImages();

@@ -27,7 +27,6 @@
         <section class="card color-card">
           <div>
             <h2>已访问标题颜色</h2>
-            <p>改变 Pixiv 列表里已访问作品的标题色。</p>
           </div>
           <label class="color-row">
             <input id="visitedColor" type="color" value="#f476a2">
@@ -39,7 +38,6 @@
           <label class="switch-row">
             <span>
               <strong>标题变色</strong>
-              <small>主功能，模拟更可靠的 visited 效果。</small>
             </span>
             <input id="markTitle" type="checkbox" checked>
           </label>
@@ -47,7 +45,6 @@
           <label class="switch-row">
             <span>
               <strong>图片遮罩</strong>
-              <small>给已访问作品图片叠一层轻量遮罩。</small>
             </span>
             <input id="markImage" type="checkbox">
           </label>
@@ -55,7 +52,6 @@
           <label class="switch-row">
             <span>
               <strong>隐藏已访问作品</strong>
-              <small>更绝对：整张作品卡片直接不显示。</small>
             </span>
             <input id="hideViewed" type="checkbox">
           </label>
@@ -77,21 +73,20 @@
         <section class="card author-card">
           <div>
             <h2>作者页</h2>
-            <p>控制 Pixiv 作者页作品列表的密度、页数过滤和缩略图清晰度。</p>
+          </div>
+
+          <div class="stepper-row">
+            <span class="stepper-label"><strong>每行作品数</strong></span>
+            <div class="stepper">
+              <button type="button" class="stepper-btn" data-action="grid-decrement" aria-label="减少每行作品数">−</button>
+              <input id="authorGridColumns" class="stepper-value" type="number" min="2" max="6" step="1" value="6" inputmode="numeric">
+              <button type="button" class="stepper-btn" data-action="grid-increment" aria-label="增加每行作品数">+</button>
+            </div>
           </div>
 
           <label class="number-row">
             <span>
-              <strong>每行</strong>
-              <small>作者页每行显示几个作品，越少缩略图越大。</small>
-            </span>
-            <input id="authorGridColumns" type="number" min="2" max="6" step="1" value="6">
-          </label>
-
-          <label class="number-row">
-            <span>
               <strong>最低页数</strong>
-              <small>隐藏页数少于该值的作品，0 或 1 表示不筛选。</small>
             </span>
             <input id="authorMinPageCount" type="number" min="0" max="999" step="1" value="0">
           </label>
@@ -99,7 +94,6 @@
           <label class="switch-row">
             <span>
               <strong>高清缩略图</strong>
-              <small>尝试用 Pixiv 接口返回的更清晰封面替换作者页卡片图。</small>
             </span>
             <input id="authorHighRes" type="checkbox">
           </label>
@@ -107,7 +101,6 @@
           <label class="switch-row">
             <span>
               <strong>实验性悬停预览</strong>
-              <small>悬停作品时尝试获取更高清首图，用于验证接口图片质量。</small>
             </span>
             <input id="authorHoverPreview" type="checkbox">
           </label>
