@@ -6,7 +6,6 @@
   author.PAGE_SIZE = 6;
   author.CACHE_TTL = 30 * 60 * 1000;
   author.UI_STORAGE_KEY = "pvmAuthorPanelUi";
-  author.SCALE_STEPS = [1, 1.2, 1.4];
   author.HOME_GRID_MIN_COLUMNS = 2;
   author.HOME_GRID_MAX_COLUMNS = 6;
   author.HOME_MIN_PAGE_MAX = 999;
@@ -32,13 +31,10 @@
     userName: "",
     page: 0,
     loading: false,
-    error: "",
-    currentBookmark: null
+    error: ""
   };
   let uiState = {
-    scaleIndex: 0,
-    pageMode: "slider",
-    authorPanelExpanded: false,
+    pageMode: "scroll",
     offsetX: 0
   };
   let currentArtworkId = null;
@@ -248,11 +244,9 @@
 
   async function fetchCurrentArtwork(artworkId) {
     const body = await fetchJson(`/ajax/illust/${artworkId}`);
-    const bookmarkData = body.bookmarkData || body.bookmark_data;
     return {
       userId: String(body.userId || body.user_id || ""),
-      userName: body.userName || body.user_name || "",
-      bookmarkId: bookmarkData?.id ? String(bookmarkData.id) : ""
+      userName: body.userName || body.user_name || ""
     };
   }
 
@@ -304,92 +298,6 @@
   author.fetchWorkDetails = fetchWorkDetails;
   author.fetchHighResUrls = fetchHighResUrls;
 
-  // --- 收藏 API ----------------------------------------------------------
-  // CSRF token 来自 <meta id="meta-global-data" content='{"token":"..."}'>。
-  function getPixivCsrfToken() {
-    const meta = document.querySelector('meta[name="global-data"], #meta-global-data');
-    if (!meta) return "";
-    try {
-      const data = JSON.parse(meta.getAttribute("content") || "{}");
-      return data.token || "";
-    } catch (error) {
-      return "";
-    }
-  }
-
-  async function addBookmark(artworkId) {
-    const token = getPixivCsrfToken();
-    if (!token) throw new Error("无法获取 Pixiv CSRF token");
-    const payload = {
-      illust_id: String(artworkId),
-      restrict: 0,
-      comment: "",
-      tags: []
-    };
-    const response = await fetch("/ajax/illusts/bookmarks/add", {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json; charset=utf-8",
-        "X-CSRF-Token": token,
-        "X-Requested-With": "XMLHttpRequest"
-      },
-      body: JSON.stringify(payload)
-    });
-    const text = await response.text();
-    let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch (_) { /* fallthrough */ }
-    if (!response.ok || (json && json.error)) {
-      console.warn("[PVM] addBookmark failed", { status: response.status, body: text });
-      throw new Error(json?.message || `收藏失败：${response.status}`);
-    }
-    const lastId = json?.body?.last_bookmark_id || json?.body?.lastBookmarkId || "";
-    if (lastId) return String(lastId);
-    return fetchBookmarkId(artworkId);
-  }
-
-  async function removeBookmark(bookmarkId) {
-    const token = getPixivCsrfToken();
-    if (!token) throw new Error("无法获取 Pixiv CSRF token");
-    const form = new URLSearchParams();
-    form.append("bookmark_id", String(bookmarkId));
-    const response = await fetch("/ajax/illusts/bookmarks/delete", {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-        "X-CSRF-Token": token,
-        "X-Requested-With": "XMLHttpRequest"
-      },
-      body: form.toString()
-    });
-    const text = await response.text();
-    let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch (_) { /* fallthrough */ }
-    if (!response.ok || (json && json.error)) {
-      console.warn("[PVM] removeBookmark failed", { status: response.status, body: text });
-      throw new Error(json?.message || `取消收藏失败：${response.status}`);
-    }
-  }
-
-  async function fetchBookmarkId(artworkId) {
-    try {
-      const body = await fetchJson(`/ajax/illust/${artworkId}`);
-      const bookmarkData = body.bookmarkData || body.bookmark_data;
-      return bookmarkData?.id ? String(bookmarkData.id) : "";
-    } catch (error) {
-      console.warn("[PVM] Failed to query bookmark id.", error);
-      return "";
-    }
-  }
-
-  author.getPixivCsrfToken = getPixivCsrfToken;
-  author.addBookmark = addBookmark;
-  author.removeBookmark = removeBookmark;
-  author.fetchBookmarkId = fetchBookmarkId;
-
   // 跨作者按 id 拉单个作品详情（用于相关作品这种作者不一致的场景）。
   // 复用 fetchHighResUrls 的缓存以避免重复请求。
   const singleArtworkCache = new Map();
@@ -435,15 +343,11 @@
 
   // --- settings / uiState 持久化 ----------------------------------------
   function normalizeUiState(raw) {
-    const scaleIndex = Number.isInteger(raw?.scaleIndex)
-      ? Math.min(Math.max(raw.scaleIndex, 0), author.SCALE_STEPS.length - 1)
-      : 0;
-    const pageMode = raw?.pageMode === "wheel" ? "wheel" : "slider";
+    // 历史值 "slider" / "buttons" 一律归一化为 "scroll"。
+    const pageMode = raw?.pageMode === "wheel" ? "wheel" : "scroll";
     const offsetX = Number.isFinite(raw?.offsetX) ? raw.offsetX : 0;
     return {
-      scaleIndex,
       pageMode,
-      authorPanelExpanded: raw?.authorPanelExpanded === true,
       offsetX
     };
   }
@@ -536,8 +440,7 @@
   async function fetchAuthorWorksForArtwork(artworkId) {
     const current = await fetchCurrentArtwork(artworkId);
     if (!current.userId) throw new Error("Cannot detect author id.");
-    const payload = await fetchAuthorWorksByUserId(current.userId, current.userName);
-    return { ...payload, bookmarkId: current.bookmarkId };
+    return fetchAuthorWorksByUserId(current.userId, current.userName);
   }
 
   async function ensureDetailsForPage(page) {

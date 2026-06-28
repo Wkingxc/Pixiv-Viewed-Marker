@@ -6,6 +6,8 @@
   let enhancementTimer = null;
   let applyingEnhancements = false;
 
+  const HOME_CARD_CLASS = "pvm-author-home-card";
+
   // --- DOM 扫描：当前作者页作品卡片网格 ----------------------------------
   function getArtworkListContainer() {
     const entries = [];
@@ -168,6 +170,8 @@
   // --- 网格列数 / 缩放 ----------------------------------------------------
   function applyUserArtworkGrid(container, displaySettings) {
     const columns = displaySettings.gridColumns;
+    // 用 zoom 做实际占位的缩放，不再用 transform: scale()，
+    // 让分页 nav 等同级元素被自然推到下方。
     const scale = Math.max(1, author.HOME_GRID_MAX_COLUMNS / columns);
     document.documentElement.style.setProperty("--pvm-author-home-columns", String(columns));
     document.documentElement.style.setProperty("--pvm-author-home-scale", String(scale));
@@ -185,6 +189,7 @@
           }
           delete node.dataset.pvmOriginalDisplay;
         }
+        node.querySelectorAll(`.${HOME_CARD_CLASS}`).forEach((card) => card.classList.remove(HOME_CARD_CLASS));
       }
     });
 
@@ -199,6 +204,14 @@
       }
       parent.style.display = "grid";
     }
+
+    // 只把真正的作品卡片打上 .pvm-author-home-card 类；
+    // 非卡片节点（如分页 nav、标题）CSS 里会让它独占整行，避免被网格挤掉。
+    const cards = new Set(container.entries.map((entry) => entry.card).filter(Boolean));
+    Array.from(parent.children).forEach((child) => {
+      if (cards.has(child)) child.classList.add(HOME_CARD_CLASS);
+      else child.classList.remove(HOME_CARD_CLASS);
+    });
   }
 
   // --- 清理 ---------------------------------------------------------------
@@ -217,6 +230,9 @@
         }
         delete node.dataset.pvmOriginalDisplay;
       }
+    });
+    document.querySelectorAll(`.${HOME_CARD_CLASS}`).forEach((node) => {
+      node.classList.remove(HOME_CARD_CLASS);
     });
     document.querySelectorAll(`.${author.HOME_HIDDEN_CLASS}`).forEach((node) => {
       node.classList.remove(author.HOME_HIDDEN_CLASS);
