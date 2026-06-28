@@ -43,7 +43,8 @@
       page: 0,
       loading: true,
       error: "",
-      routeKey
+      routeKey,
+      currentBookmark: null
     });
     await author.artworkPanel.renderPanel();
 
@@ -59,7 +60,10 @@
         page: routeContext.type === "artwork" ? author.currentPageFor(payload.ids || [], routeContext.artworkId) : 0,
         loading: false,
         error: "",
-        routeKey
+        routeKey,
+        currentBookmark: routeContext.type === "artwork"
+          ? { artworkId: routeContext.artworkId, bookmarkId: payload.bookmarkId || "" }
+          : null
       });
     } catch (error) {
       const fallback = author.fallbackWorksFromDom();
@@ -71,7 +75,8 @@
         page: routeContext.type === "artwork" ? author.currentPageFor(fallback.ids, routeContext.artworkId) : 0,
         loading: false,
         error: fallback.ids.length ? "" : "作者作品加载失败",
-        routeKey
+        routeKey,
+        currentBookmark: null
       });
     }
 

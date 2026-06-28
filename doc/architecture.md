@@ -133,6 +133,7 @@ Pixiv-Viewed-Marker/
 - 通用工具：`stripLocale`、`getRouteContext`、`getDisplaySettingsForRoute`（把当前路由映射为统一的"页面显示设置"——作者页读 `authorPage*`、作品页读 `relatedWorks*`）、`escapeHtml`、`chunk`、`clampNumber` 等。
 - Quality 工具：`pickImage` / `pickPreviewImage` / `pickHighResImage` / `resolveQualityUrl` / `normalizeWork`。
 - API 客户端：`fetchJson` / `fetchCurrentArtwork` / `fetchAuthorWorkIds` / `fetchWorkDetails` / `fetchHighResUrls` / `fetchArtworkDetail`（按 id 单拉，跨作者场景用，带 in-memory 缓存）。
+- 收藏 API：`getPixivCsrfToken`（从 `meta[name="global-data"]` 读 token）/ `addBookmark(artworkId)`（POST `/ajax/illusts/bookmarks/add`，JSON body `{illust_id, restrict:0, comment:"", tags:[]}`，带 `X-CSRF-Token` 头）/ `removeBookmark(bookmarkId)`（POST `/ajax/illusts/bookmarks/delete`，form `bookmark_id=<id>`，带 `X-CSRF-Token` 头）/ `fetchBookmarkId(artworkId)`（重新查询当前 bookmark id）。`fetchCurrentArtwork` 同步返回 `bookmarkId`，`fetchAuthorWorksForArtwork` 将其透传到 `state.currentBookmark`，供主图爱心拦截器读取。
 - chrome.storage 持久化：`loadUiState` / `saveUiState` / `loadSettings` / `normalizeAuthorSettings` / `getCache` / `setCache`。
 - 详情加载：`fetchAuthorWorksByUserId` / `fetchAuthorWorksForArtwork` / `ensureDetailsForPage` / `preloadPageDetails` / `ensureDetailsForIds` / `workForId` / `currentPageFor` / `fallbackWorksFromDom` / `getViewedSet`。
 
@@ -181,7 +182,8 @@ Pixiv-Viewed-Marker/
 - `artworkPageHideAuthorWorks`：找到包含当前作者主页链接 + 多张该作者其它作品缩略图的 `<section>`，加上 `.pvm-hidden-author-works-banner`（CSS 中 `display: none !important`）。当前作者 ID 来自 `author.getState().userId`（由 `pvm-author-bootstrap` 在 artwork 路由拉作者作品索引时填入）。
 - `artworkPageHideComments`：扫描 `<main>` 下含 `h1/h2/h3` 文本匹配 `コメント / Comments / 评论 / 댓글` 的 section，加上 `.pvm-hidden-comments-section`。
 - 关闭对应开关或离开 artwork 路由时移除上述 class，DOM 不会被破坏，只是 `display: none`。
-- 暴露 `apply()` / `scheduleApply(delay)` / `clear()`。bootstrap 在路由切换、`MutationObserver` 触发的 DOM 变化和 `chrome.storage.onChanged` 中调用 `scheduleApply(0)`。
+- 主图爱心拦截器（`hookMainHeart()`）：在 document `click` capture 阶段拦截 `[data-ga4-label="bookmark_button"]` 内的按钮（仅 artwork 路由 + 不在 `<nav>` 轮播 + 不在 `#pvm-author-panel`），`preventDefault + stopImmediatePropagation` 阻断 Pixiv 自身的"展开多图 / 跳收藏编辑"行为，改调 `author.addBookmark` / `author.removeBookmark`，本地维护 `state.currentBookmark`，并把心形 SVG 两条 path 的 `fill` 涂粉/还原。
+- 暴露 `apply()` / `scheduleApply(delay)` / `clear()` / `hookMainHeart()`。bootstrap 在路由切换、`MutationObserver` 触发的 DOM 变化和 `chrome.storage.onChanged` 中调用 `scheduleApply(0)`；`hookMainHeart()` 在模块加载时一次性挂上 capture 监听。
 
 ### `pvm-author-bootstrap.js`
 

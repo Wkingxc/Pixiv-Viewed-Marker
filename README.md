@@ -56,6 +56,7 @@ Chrome MV3 扩展，用本地记录标记 Pixiv 已访问作品，并增强作�
 - 横向移动：按住顶部"当前位置 N/M"文字左右拖动可以平移面板（不允许上下移动）。
 - 翻页：底部按钮翻页或切换为滚轮翻页模式。
 - 中键 / Ctrl·Cmd+左键：通过扩展后台脚本调 `chrome.tabs.create` 强制后台新标签打开作品，且插入到当前标签右侧。
+- 接管主图爱心按钮：点击作品页主图区域的爱心，不再被 Pixiv 强制展开多图作品；扩展会直接调 `/ajax/illusts/bookmarks/add` 与 `/ajax/illusts/bookmarks/delete`，已收藏的爱心再点即取消。
 
 ## Popup
 

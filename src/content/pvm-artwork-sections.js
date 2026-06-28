@@ -120,4 +120,79 @@
   artworkSections.apply = applyArtworkSections;
   artworkSections.scheduleApply = scheduleApply;
   artworkSections.clear = clearAll;
+
+  // --- 接管主作品爱心按钮 ----------------------------------------------
+  // 点击 Pixiv 自带爱心会把多图作品强制展开，且已收藏后再点会跳到收藏编辑。
+  // 这里在 capture 阶段抢先拦截，改走我们自己的 add/removeBookmark。
+  // 只拦截"主图区域"的爱心：判断条件 = 作品页 + 按钮位于
+  // [data-ga4-label="bookmark_button"] 包裹下 + 不在 <nav>（轮播/横幅）内
+  // + 不在 #pvm-author-panel 内。
+  let mainHeartHooked = false;
+  function hookMainHeart() {
+    if (mainHeartHooked) return;
+    mainHeartHooked = true;
+    document.addEventListener("click", onDocumentClickCapture, true);
+  }
+
+  function onDocumentClickCapture(event) {
+    const routeContext = author.getRouteContext();
+    if (routeContext?.type !== "artwork") return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("#pvm-author-panel")) return;
+    if (target.closest("nav")) return;
+    const wrapper = target.closest('[data-ga4-label="bookmark_button"]');
+    if (!wrapper) return;
+    const button = wrapper.querySelector("button");
+    if (!button) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    void toggleMainBookmark(routeContext.artworkId, button);
+  }
+
+  let mainToggleInFlight = false;
+  async function toggleMainBookmark(artworkId, button) {
+    if (mainToggleInFlight) return;
+    mainToggleInFlight = true;
+    button.disabled = true;
+    try {
+      const state = author.getState();
+      const cached = state.currentBookmark;
+      const cachedBookmarkId = cached && cached.artworkId === artworkId ? cached.bookmarkId : "";
+
+      if (cachedBookmarkId) {
+        await author.removeBookmark(cachedBookmarkId);
+        author.patchState({ currentBookmark: { artworkId, bookmarkId: "" } });
+        paintHeart(button, false);
+      } else {
+        const newId = await author.addBookmark(artworkId);
+        author.patchState({ currentBookmark: { artworkId, bookmarkId: newId || "" } });
+        paintHeart(button, true);
+      }
+      // 让悬浮面板里的"已收藏"按钮同步刷新
+      author.artworkPanel?.renderPanel?.().catch(() => {});
+    } catch (error) {
+      console.warn("[PVM] 主爱心切换收藏失败", error);
+    } finally {
+      mainToggleInFlight = false;
+      button.disabled = false;
+    }
+  }
+
+  // Pixiv 心形 SVG 有两条 path：外轮廓 + 内白心。已收藏时把两者都染粉。
+  function paintHeart(button, bookmarked) {
+    const paths = button.querySelectorAll("svg path");
+    if (paths.length === 0) return;
+    if (bookmarked) {
+      paths.forEach((path) => { path.style.fill = "#FF4060"; });
+    } else {
+      paths.forEach((path) => { path.style.fill = ""; });
+    }
+  }
+
+  artworkSections.hookMainHeart = hookMainHeart;
+  hookMainHeart();
 })(globalThis);
