@@ -43,8 +43,11 @@ fix: 已关注作者页被误识别为作者作品页
 
 ## 文档同步
 
-- 用户行为/UI 改动需要同步更新 `README.md` 中"功能"或对应章节。
-- 模块边界、数据结构、消息协议变更需要同步更新 `doc/architecture.md`。
+- **不要实时更新文档**。开发过程中只改代码，不要顺手改 `README.md` / `doc/architecture.md`。
+- 只有当用户明确要求提交时，才走文档同步流程：
+  1. 用 `git diff` / `git status` 查看本次实际改动；
+  2. 根据真实改动一次性更新 `README.md`（用户行为 / UI 改动）和 `doc/architecture.md`（模块边界、数据结构、消息协议变更）；
+  3. 把文档与代码一起提交。
 - 提交前请检查 README / architecture.md 是否与代码一致。
 
 ## 安全与隐私
