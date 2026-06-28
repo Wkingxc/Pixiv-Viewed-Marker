@@ -130,7 +130,6 @@
   async function start() {
     await author.loadUiState();
     await author.loadSettings();
-    await author.migrateLegacyHomeSettings();
     await loadPanelForCurrentRoute();
     watchRoute();
     watchDom();

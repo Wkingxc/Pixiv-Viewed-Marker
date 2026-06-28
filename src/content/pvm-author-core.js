@@ -14,18 +14,7 @@
   author.HOME_HIDDEN_CLASS = "pvm-hidden-page-count-artwork";
 
   author.HOVER_PREVIEW_QUALITIES = ["off", "small", "medium", "original"];
-  author.HOVER_PREVIEW_QUALITY_LABELS = {
-    off: "关闭",
-    small: "small（540 长边）",
-    medium: "medium（1200 长边）",
-    original: "original（原图）"
-  };
   author.HIGH_RES_QUALITIES = ["small", "medium", "original"];
-  author.HIGH_RES_QUALITY_LABELS = {
-    small: "small（540 长边）",
-    medium: "medium（1200 长边）",
-    original: "original（原图）"
-  };
   // 简化档位名 -> Pixiv /ajax/illust urls 字段
   author.QUALITY_URL_KEY = {
     small: "small",
@@ -150,17 +139,11 @@
     return escapeHtml(value || "");
   }
 
-  function shortenUrl(url) {
-    if (typeof url !== "string" || url.length <= 72) return url || "";
-    return `${url.slice(0, 40)}…${url.slice(-28)}`;
-  }
-
   author.clampNumber = clampNumber;
   author.chunk = chunk;
   author.sortIds = sortIds;
   author.escapeHtml = escapeHtml;
   author.escapeAttr = escapeAttr;
-  author.shortenUrl = shortenUrl;
 
   // --- Quality 工具 -------------------------------------------------------
   function resolveQualityUrl(urls, quality) {
@@ -224,16 +207,6 @@
     return `${image} 1x, ${image} 2x`;
   }
 
-  function collectAvailableUrls(work) {
-    const urls = work?.urls || {};
-    const available = {};
-    Object.keys(urls).forEach((key) => {
-      if (typeof urls[key] === "string" && urls[key]) available[key] = urls[key];
-    });
-    if (work?.url && !available.regular) available.url = work.url;
-    return available;
-  }
-
   function normalizeWork(work, id) {
     return {
       id: String(work.id || id),
@@ -255,7 +228,6 @@
   author.pickPreviewImage = pickPreviewImage;
   author.pickHighResImage = pickHighResImage;
   author.pickHighResImageSet = pickHighResImageSet;
-  author.collectAvailableUrls = collectAvailableUrls;
   author.normalizeWork = normalizeWork;
 
   // --- Pixiv API 客户端 ---------------------------------------------------
@@ -454,34 +426,11 @@
     author.setSettings(normalizeAuthorSettings(data.settings));
   }
 
-  async function migrateLegacyHomeSettings() {
-    try {
-      const data = await chrome.storage.local.get([author.UI_STORAGE_KEY, "settings"]);
-      const legacy = data[author.UI_STORAGE_KEY];
-      const storedSettings = data.settings || {};
-      const patch = {};
-      if (storedSettings.authorPageGridColumns === undefined && Number.isFinite(legacy?.homeGridColumns)) {
-        patch.authorPageGridColumns = clampNumber(legacy.homeGridColumns, author.HOME_GRID_MIN_COLUMNS, author.HOME_GRID_MAX_COLUMNS, 6);
-      }
-      if (storedSettings.authorPageMinPageCount === undefined && Number.isFinite(legacy?.homeMinPageCount)) {
-        patch.authorPageMinPageCount = clampNumber(legacy.homeMinPageCount, 0, author.HOME_MIN_PAGE_MAX, 0);
-      }
-      if (storedSettings.authorPageUseHighResThumbnails === undefined && legacy?.homeUseHighResThumbnails === true) {
-        patch.authorPageUseHighResThumbnails = true;
-      }
-      if (Object.keys(patch).length === 0) return;
-      author.setSettings(normalizeAuthorSettings(await PVM.storage.saveSettings(patch)));
-    } catch (error) {
-      console.warn("[PVM] Failed to migrate author homepage settings.", error);
-    }
-  }
-
   author.normalizeUiState = normalizeUiState;
   author.loadUiState = loadUiState;
   author.saveUiState = saveUiState;
   author.normalizeAuthorSettings = normalizeAuthorSettings;
   author.loadSettings = loadSettings;
-  author.migrateLegacyHomeSettings = migrateLegacyHomeSettings;
 
   // --- 作者作品索引获取 / 详情按页加载 ------------------------------
   async function fetchAuthorWorksByUserId(userId, userName = "") {

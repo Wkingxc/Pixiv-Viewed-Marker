@@ -24,15 +24,7 @@
     relatedWorksHoverPreviewEnabled: false,
     relatedWorksHoverPreviewQuality: "off",
     artworkPageHideAuthorWorks: false,
-    artworkPageHideComments: false,
-    markUserName: false,
-    importBookmarkAddUrls: false
-  };
-
-  PVM.DEFAULT_STATS = {
-    lastHistoryImportAt: null,
-    lastHistoryImportArtworkCount: 0,
-    lastHistoryImportUserCount: 0
+    artworkPageHideComments: false
   };
 
   PVM.DEFAULT_EXCLUSIONS = {

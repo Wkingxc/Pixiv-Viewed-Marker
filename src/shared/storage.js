@@ -6,8 +6,7 @@
     settings: PVM.DEFAULT_SETTINGS,
     viewedArtworks: {},
     viewedUsers: {},
-    exclusions: PVM.DEFAULT_EXCLUSIONS,
-    stats: PVM.DEFAULT_STATS
+    exclusions: PVM.DEFAULT_EXCLUSIONS
   };
 
   function clone(value) {
@@ -33,17 +32,15 @@
       exclusions: {
         ...clone(PVM.DEFAULT_EXCLUSIONS),
         pages: storedExclusions.pages || {}
-      },
-      stats: { ...clone(PVM.DEFAULT_STATS), ...(stored.stats || {}) }
+      }
     };
   }
 
-  async function saveCollections({ viewedArtworks, viewedUsers, exclusions, stats, settings } = {}) {
+  async function saveCollections({ viewedArtworks, viewedUsers, exclusions, settings } = {}) {
     const patch = { schemaVersion: PVM.SCHEMA_VERSION };
     if (viewedArtworks) patch.viewedArtworks = viewedArtworks;
     if (viewedUsers) patch.viewedUsers = viewedUsers;
     if (exclusions) patch.exclusions = exclusions;
-    if (stats) patch.stats = stats;
     if (settings) patch.settings = settings;
     await storageSet(patch);
   }
@@ -55,38 +52,28 @@
     return nextSettings;
   }
 
-  function mergeRecord(collection, id, source, timestamp, count = 1) {
+  function mergeRecord(collection, id, timestamp) {
     const existing = collection[id];
     if (!existing) {
-      collection[id] = {
-        id,
-        visitedAt: timestamp,
-        visitCount: count,
-        source,
-        updatedAt: timestamp
-      };
+      collection[id] = { id, visitedAt: timestamp };
       return;
     }
-
     existing.visitedAt = Math.max(existing.visitedAt || 0, timestamp);
-    existing.visitCount = (existing.visitCount || 0) + count;
-    existing.source = existing.source || source;
-    existing.updatedAt = timestamp;
   }
 
-  async function recordParsedVisit(parsed, source = "runtime", timestamp = Date.now()) {
+  async function recordParsedVisit(parsed, timestamp = Date.now()) {
     if (!parsed || !parsed.id) return null;
 
     const data = await getAllData();
 
     if (parsed.type === "artwork") {
-      mergeRecord(data.viewedArtworks, parsed.id, source, timestamp);
+      mergeRecord(data.viewedArtworks, parsed.id, timestamp);
       await saveCollections({ viewedArtworks: data.viewedArtworks });
       return data.viewedArtworks[parsed.id];
     }
 
     if (parsed.type === "user") {
-      mergeRecord(data.viewedUsers, parsed.id, source, timestamp);
+      mergeRecord(data.viewedUsers, parsed.id, timestamp);
       await saveCollections({ viewedUsers: data.viewedUsers });
       return data.viewedUsers[parsed.id];
     }
@@ -120,7 +107,7 @@
     return data.exclusions;
   }
 
-  async function mergeImportedData(importData, source = "manual") {
+  async function mergeImportedData(importData) {
     const data = await getAllData();
     const now = Date.now();
     const artworks = importData.viewedArtworks || {};
@@ -137,23 +124,11 @@
     });
 
     Object.entries(artworks).forEach(([id, record]) => {
-      mergeRecord(
-        data.viewedArtworks,
-        id,
-        record.source || source,
-        record.visitedAt || now,
-        record.visitCount || 1
-      );
+      mergeRecord(data.viewedArtworks, id, record.visitedAt || now);
     });
 
     Object.entries(users).forEach(([id, record]) => {
-      mergeRecord(
-        data.viewedUsers,
-        id,
-        record.source || source,
-        record.visitedAt || now,
-        record.visitCount || 1
-      );
+      mergeRecord(data.viewedUsers, id, record.visitedAt || now);
     });
 
     await saveCollections({

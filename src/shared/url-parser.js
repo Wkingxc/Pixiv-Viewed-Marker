@@ -13,7 +13,7 @@
     return pathname.replace(/^\/(?:en|ja|zh|ko|zh-tw|zh-cn)(?=\/)/i, "");
   }
 
-  function parsePixivUrl(input, options = {}) {
+  function parsePixivUrl(input) {
     const url = toUrl(input);
     if (!url) return null;
 
@@ -38,18 +38,6 @@
         id: userMatch[1],
         normalized: `/users/${userMatch[1]}`
       };
-    }
-
-    if (options.importBookmarkAddUrls && pathname === "/bookmark_add.php") {
-      const illustId = url.searchParams.get("illust_id");
-      const type = url.searchParams.get("type");
-      if (type === "illust" && /^\d+$/.test(illustId || "")) {
-        return {
-          type: "artwork",
-          id: illustId,
-          normalized: `/artworks/${illustId}`
-        };
-      }
     }
 
     return null;

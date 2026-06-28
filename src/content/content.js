@@ -197,7 +197,7 @@
     }, delay);
   }
 
-  async function recordCurrentPage(source = "runtime") {
+  async function recordCurrentPage() {
     const parsed = PVM.parsePixivUrl(location.href);
     if (!parsed) {
       scheduleStorageSync(document, 50);
@@ -208,18 +208,18 @@
     if (parsed.type === "user") viewedUserSet.add(parsed.id);
 
     const intentKey = `${parsed.type}:${parsed.id}`;
-    if (source === "runtime" && Date.now() - (recentIntentMap.get(intentKey) || 0) < 2000) {
+    if (Date.now() - (recentIntentMap.get(intentKey) || 0) < 2000) {
       scheduleStorageSync(document, 50);
       return;
     }
 
-    await PVM.storage.recordParsedVisit(parsed, source);
+    await PVM.storage.recordParsedVisit(parsed);
     scheduleStorageSync(document, 50);
   }
 
-  function recordVisitSafely(parsed, source, timestamp) {
+  function recordVisitSafely(parsed, timestamp) {
     const fallback = () => {
-      PVM.storage.recordParsedVisit(parsed, source, timestamp).catch(console.error);
+      PVM.storage.recordParsedVisit(parsed, timestamp).catch(console.error);
     };
 
     try {
@@ -232,7 +232,6 @@
         .sendMessage({
           type: "PVM_RECORD_VISIT",
           parsed,
-          source,
           timestamp
         })
         .catch(fallback);
@@ -263,7 +262,7 @@
     if (parsed.type === "artwork") viewedArtworkSet.add(parsed.id);
     if (parsed.type === "user") viewedUserSet.add(parsed.id);
 
-    recordVisitSafely(parsed, event.type === "auxclick" ? "auxclick" : "click", now);
+    recordVisitSafely(parsed, now);
 
     if (parsed.type === "artwork") {
       markAnchor(anchor, parsed);
@@ -289,7 +288,7 @@
     const notifyUrlChanged = () => {
       window.setTimeout(() => {
         if (location.href !== currentHref) currentHref = location.href;
-        recordCurrentPage("runtime").catch(console.error);
+        recordCurrentPage().catch(console.error);
       }, 0);
     };
 
@@ -312,7 +311,7 @@
     window.setInterval(() => {
       if (location.href === currentHref) return;
       currentHref = location.href;
-      recordCurrentPage("runtime").catch(console.error);
+      recordCurrentPage().catch(console.error);
     }, 300);
   }
 
@@ -400,7 +399,7 @@
   document.addEventListener("mousedown", recordIntentFromEvent, true);
   document.addEventListener("click", recordIntentFromEvent, true);
   document.addEventListener("auxclick", recordIntentFromEvent, true);
-  await recordCurrentPage("runtime");
+  await recordCurrentPage();
   scanNode(document, true);
   watchDom();
   watchUrlChanges();

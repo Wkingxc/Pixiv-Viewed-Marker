@@ -144,7 +144,11 @@
 
   async function refreshData() {
     currentData = await PVM.storage.getAllData();
-    setupSectionEl.hidden = Boolean(currentData.stats.lastHistoryImportAt);
+    // 已经有任何访问记录就视为完成过初始化，不再显示导入入口
+    const hasAnyVisits =
+      Object.keys(currentData.viewedArtworks || {}).length > 0 ||
+      Object.keys(currentData.viewedUsers || {}).length > 0;
+    setupSectionEl.hidden = hasAnyVisits;
     renderSettings(currentData.settings);
     renderExcludedPages(excludedPagesEl, currentData.exclusions.pages || {});
   }

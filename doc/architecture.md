@@ -133,7 +133,7 @@ Pixiv-Viewed-Marker/
 - 通用工具：`stripLocale`、`getRouteContext`、`getDisplaySettingsForRoute`（把当前路由映射为统一的"页面显示设置"——作者页读 `authorPage*`、作品页读 `relatedWorks*`）、`escapeHtml`、`chunk`、`clampNumber` 等。
 - Quality 工具：`pickImage` / `pickPreviewImage` / `pickHighResImage` / `resolveQualityUrl` / `normalizeWork`。
 - API 客户端：`fetchJson` / `fetchCurrentArtwork` / `fetchAuthorWorkIds` / `fetchWorkDetails` / `fetchHighResUrls` / `fetchArtworkDetail`（按 id 单拉，跨作者场景用，带 in-memory 缓存）。
-- chrome.storage 持久化：`loadUiState` / `saveUiState` / `loadSettings` / `migrateLegacyHomeSettings` / `normalizeAuthorSettings` / `getCache` / `setCache`。
+- chrome.storage 持久化：`loadUiState` / `saveUiState` / `loadSettings` / `normalizeAuthorSettings` / `getCache` / `setCache`。
 - 详情加载：`fetchAuthorWorksByUserId` / `fetchAuthorWorksForArtwork` / `ensureDetailsForPage` / `preloadPageDetails` / `ensureDetailsForIds` / `workForId` / `currentPageFor` / `fallbackWorksFromDom` / `getViewedSet`。
 
 ### `pvm-hover-preview.js`
@@ -189,7 +189,7 @@ Pixiv-Viewed-Marker/
 
 - `loadPanelForCurrentRoute()`：读取 `author.getRouteContext()` 决定是作品页面板还是作者页增强；按需调用 `fetchAuthorWorksForArtwork` / `fetchAuthorWorksByUserId`，失败时降级到 `fallbackWorksFromDom`。
 - `watchRoute()` / `watchDom()` / `watchStorage()` / `watchWindow()`：监听 URL 变化、DOM 变化、`chrome.storage` 变化、窗口大小变化，触发相应的重渲。
-- `start()`：依次 `loadUiState` → `loadSettings` → `migrateLegacyHomeSettings` → `loadPanelForCurrentRoute` → 注册 watcher。
+- `start()`：依次 `loadUiState` → `loadSettings` → `loadPanelForCurrentRoute` → 注册 watcher。
 
 ### `author-panel.css`
 
@@ -226,12 +226,11 @@ settings
 viewedArtworks
 viewedUsers
 exclusions
-stats
 pvmAuthorPanel:{userId}
 pvmAuthorPanelUi
 ```
 
-`viewedArtworks` 和 `viewedUsers` 使用 ID 作为 key。
+`viewedArtworks` 和 `viewedUsers` 使用 ID 作为 key，记录形如 `{ id, visitedAt }`。
 
 `exclusions.pages` 使用 pathname 作为 key。
 

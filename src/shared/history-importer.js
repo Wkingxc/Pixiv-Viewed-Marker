@@ -14,43 +14,25 @@
     let parsedUserRecords = 0;
 
     results.forEach((item) => {
-      const parsed = PVM.parsePixivUrl(item.url, data.settings);
+      const parsed = PVM.parsePixivUrl(item.url);
       if (!parsed) return;
 
       const timestamp = item.lastVisitTime || now;
-      const visitCount = Math.max(1, item.visitCount || 1);
 
       if (parsed.type === "artwork") {
         parsedArtworkRecords += 1;
-        PVM.storage.mergeRecord(
-          data.viewedArtworks,
-          parsed.id,
-          "history",
-          timestamp,
-          visitCount
-        );
+        PVM.storage.mergeRecord(data.viewedArtworks, parsed.id, timestamp);
       }
 
       if (parsed.type === "user") {
         parsedUserRecords += 1;
-        PVM.storage.mergeRecord(
-          data.viewedUsers,
-          parsed.id,
-          "history",
-          timestamp,
-          visitCount
-        );
+        PVM.storage.mergeRecord(data.viewedUsers, parsed.id, timestamp);
       }
     });
 
-    data.stats.lastHistoryImportAt = now;
-    data.stats.lastHistoryImportArtworkCount = Object.keys(data.viewedArtworks).length;
-    data.stats.lastHistoryImportUserCount = Object.keys(data.viewedUsers).length;
-
     await PVM.storage.saveCollections({
       viewedArtworks: data.viewedArtworks,
-      viewedUsers: data.viewedUsers,
-      stats: data.stats
+      viewedUsers: data.viewedUsers
     });
 
     return {

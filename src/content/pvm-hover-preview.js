@@ -13,45 +13,20 @@
     const cacheKey = `${id}:${quality}`;
     if (hoverPreviewCache.has(cacheKey)) return hoverPreviewCache.get(cacheKey);
 
-    let result = null;
-    let availableUrls = {};
+    let image = "";
     try {
       const body = await author.fetchJson(`/ajax/illust/${id}`);
-      availableUrls = author.collectAvailableUrls(body);
-      const direct = author.resolveQualityUrl(body.urls, quality);
-      const image = direct || author.pickPreviewImage(body, quality);
-      if (image) {
-        let actualQuality = quality;
-        if (!direct) {
-          const matched = Object.keys(body.urls || {}).find((key) => body.urls[key] === image);
-          actualQuality = matched || "fallback";
-        }
-        result = {
-          id,
-          title: body.title || author.getState().workMap[id]?.title || `Artwork ${id}`,
-          image,
-          quality,
-          actualQuality,
-          availableUrls
-        };
-      }
+      image = author.resolveQualityUrl(body.urls, quality) || author.pickPreviewImage(body, quality);
     } catch (error) {
       console.warn("[PVM] Failed to fetch hover preview image.", error);
     }
 
-    if (!result) {
+    if (!image) {
       const fallback = author.getState().workMap[id];
-      const image = fallback?.highResImage || fallback?.image || "";
-      result = image ? {
-        id,
-        title: fallback?.title || `Artwork ${id}`,
-        image,
-        quality,
-        actualQuality: "fallback",
-        availableUrls
-      } : null;
+      image = fallback?.highResImage || fallback?.image || "";
     }
 
+    const result = image ? { id, image } : null;
     hoverPreviewCache.set(cacheKey, result);
     return result;
   }
