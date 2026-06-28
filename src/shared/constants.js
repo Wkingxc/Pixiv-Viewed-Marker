@@ -17,6 +17,14 @@
     authorPageHighResThumbnailQuality: "original",
     authorPageHoverPreviewEnabled: false,
     authorPageHoverPreviewQuality: "off",
+    relatedWorksGridColumns: 6,
+    relatedWorksMinPageCount: 0,
+    relatedWorksUseHighResThumbnails: false,
+    relatedWorksHighResThumbnailQuality: "original",
+    relatedWorksHoverPreviewEnabled: false,
+    relatedWorksHoverPreviewQuality: "off",
+    artworkPageHideAuthorWorks: false,
+    artworkPageHideComments: false,
     markUserName: false,
     importBookmarkAddUrls: false
   };

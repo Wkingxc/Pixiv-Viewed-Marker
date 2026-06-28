@@ -11,6 +11,7 @@
       const panel = author.artworkPanel?.getPanel?.();
       if (panel) panel.hidden = true;
       author.authorPage?.clearUserArtworkPageEnhancements();
+      author.artworkSections?.clear?.();
       return;
     }
 
@@ -21,12 +22,18 @@
     if (routeKey === previousRouteKey && author.getState().ids.length) {
       await author.artworkPanel.renderPanel();
       author.authorPage?.scheduleUserArtworkEnhancements(0);
+      author.artworkSections?.scheduleApply?.(0);
       return;
     }
 
     author.setCurrentArtworkId(routeContext.type === "artwork" ? routeContext.artworkId : null);
     if (routeContext.type !== "userArtworks") {
+      // 切换 artwork 路由时清除上一个作者页的高清/网格副作用
       author.authorPage?.clearUserArtworkPageEnhancements();
+    }
+    if (routeContext.type !== "artwork") {
+      // 离开作品页时去掉作者横幅/评论区的隐藏 class
+      author.artworkSections?.clear?.();
     }
     author.setState({
       ids: [],
@@ -70,6 +77,7 @@
 
     await author.artworkPanel.renderPanel();
     author.authorPage?.scheduleUserArtworkEnhancements(0);
+    author.artworkSections?.scheduleApply?.(0);
   }
 
   function watchRoute() {
@@ -88,6 +96,7 @@
         if (Array.from(mutation.addedNodes).some((node) => node.id === "pvm-author-hover-preview" || node.closest?.("#pvm-author-hover-preview"))) continue;
         if (mutation.addedNodes.length > 0 || mutation.type === "characterData") {
           author.authorPage?.scheduleUserArtworkEnhancements();
+          author.artworkSections?.scheduleApply?.();
           return;
         }
       }
@@ -101,6 +110,7 @@
       if (changes.settings) {
         author.setSettings(author.normalizeAuthorSettings(changes.settings.newValue));
         author.authorPage?.scheduleUserArtworkEnhancements(0);
+        author.artworkSections?.scheduleApply?.(0);
       }
       if (changes.viewedArtworks || changes.settings) {
         author.artworkPanel.renderPanel().catch(console.error);

@@ -19,8 +19,8 @@
       <nav class="tabs" aria-label="功能页签">
         <button class="tab is-active" data-tab="mark" type="button">标记</button>
         <button class="tab" data-tab="author" type="button">作者页</button>
-        <button class="tab" data-tab="exclude" type="button">排除</button>
-        <button class="tab" data-tab="backup" type="button">备份</button>
+        <button class="tab" data-tab="related" type="button">作品页</button>
+        <button class="tab" data-tab="other" type="button">其他</button>
       </nav>
 
       <section class="tab-panel is-active" id="tab-mark">
@@ -71,10 +71,6 @@
 
       <section class="tab-panel" id="tab-author">
         <section class="card author-card">
-          <div>
-            <h2>作者页</h2>
-          </div>
-
           <div class="stepper-row">
             <span class="stepper-label"><strong>每行作品数</strong></span>
             <div class="stepper">
@@ -100,14 +96,59 @@
 
           <label class="switch-row">
             <span>
-              <strong>实验性悬停预览</strong>
+              <strong>悬停预览</strong>
             </span>
             <input id="authorHoverPreview" type="checkbox">
           </label>
         </section>
       </section>
 
-      <section class="tab-panel" id="tab-exclude">
+      <section class="tab-panel" id="tab-related">
+        <section class="card switches">
+          <label class="switch-row">
+            <span>
+              <strong>隐藏作者其他作品横幅</strong>
+            </span>
+            <input id="artworkHideAuthorWorks" type="checkbox">
+          </label>
+
+          <label class="switch-row">
+            <span>
+              <strong>隐藏评论区</strong>
+            </span>
+            <input id="artworkHideComments" type="checkbox">
+          </label>
+        </section>
+
+        <section class="card author-card">
+          <h2>相关作品</h2>
+
+          <div class="stepper-row">
+            <span class="stepper-label"><strong>每行作品数</strong></span>
+            <div class="stepper">
+              <button type="button" class="stepper-btn" data-action="related-grid-decrement" aria-label="减少每行作品数">−</button>
+              <input id="relatedGridColumns" class="stepper-value" type="number" min="2" max="6" step="1" value="6" inputmode="numeric">
+              <button type="button" class="stepper-btn" data-action="related-grid-increment" aria-label="增加每行作品数">+</button>
+            </div>
+          </div>
+
+          <label class="number-row">
+            <span>
+              <strong>最低页数</strong>
+            </span>
+            <input id="relatedMinPageCount" type="number" min="0" max="999" step="1" value="0">
+          </label>
+
+          <label class="switch-row">
+            <span>
+              <strong>悬停预览</strong>
+            </span>
+            <input id="relatedHoverPreview" type="checkbox">
+          </label>
+        </section>
+      </section>
+
+      <section class="tab-panel" id="tab-other">
         <section class="card exclude-card">
           <h2>排除页面渲染</h2>
           <p>输入页面 URL。命中这个页面时不变色、不遮罩、不隐藏，例如你的收藏页。</p>
@@ -121,9 +162,7 @@
           <summary>已排除页面</summary>
           <ul id="excludedPages" class="plain-list"></ul>
         </details>
-      </section>
 
-      <section class="tab-panel" id="tab-backup">
         <section class="card backup-card">
           <h2>备份与迁移</h2>
           <p>导出 JSON 可留作本地备份；导入会合并记录，不会覆盖现有数据。</p>

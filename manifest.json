@@ -41,6 +41,7 @@
         "src/content/pvm-hover-preview.js",
         "src/content/pvm-author-page.js",
         "src/content/pvm-artwork-panel.js",
+        "src/content/pvm-artwork-sections.js",
         "src/content/pvm-author-bootstrap.js"
       ],
       "run_at": "document_idle"

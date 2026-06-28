@@ -129,10 +129,9 @@
     return state.workMap[entry.id].urls;
   }
 
-  function applyHighResImageToEntry(entry) {
-    const settings = author.getSettings();
+  function applyHighResImageToEntry(entry, displaySettings) {
     const state = author.getState();
-    const quality = settings.authorPageHighResThumbnailQuality;
+    const quality = displaySettings.highResQuality;
     const work = state.workMap[entry.id];
     if (!work) return;
     const highResImage = author.pickHighResImage(work, quality);
@@ -167,10 +166,10 @@
   }
 
   // --- 网格列数 / 缩放 ----------------------------------------------------
-  function applyUserArtworkGrid(container) {
-    const settings = author.getSettings();
-    const scale = Math.max(1, author.HOME_GRID_MAX_COLUMNS / settings.authorPageGridColumns);
-    document.documentElement.style.setProperty("--pvm-author-home-columns", String(settings.authorPageGridColumns));
+  function applyUserArtworkGrid(container, displaySettings) {
+    const columns = displaySettings.gridColumns;
+    const scale = Math.max(1, author.HOME_GRID_MAX_COLUMNS / columns);
+    document.documentElement.style.setProperty("--pvm-author-home-columns", String(columns));
     document.documentElement.style.setProperty("--pvm-author-home-scale", String(scale));
     document.querySelectorAll(`.${author.HOME_GRID_CLASS}`).forEach((node) => {
       if (node !== container?.parent) {
@@ -224,10 +223,17 @@
     });
   }
 
-  // --- 主入口：在作者页应用增强 ------------------------------------------
+  // --- 主入口：在作者页 / 作品页应用网格增强 ----------------------------
   async function applyUserArtworkPageEnhancements() {
     if (applyingEnhancements) return;
-    if (author.getRouteContext()?.type !== "userArtworks") {
+    const routeContext = author.getRouteContext();
+    const routeType = routeContext?.type;
+    if (routeType !== "userArtworks" && routeType !== "artwork") {
+      clearUserArtworkPageEnhancements();
+      return;
+    }
+    const displaySettings = author.getDisplaySettingsForRoute(routeContext);
+    if (!displaySettings) {
       clearUserArtworkPageEnhancements();
       return;
     }
@@ -236,35 +242,41 @@
     try {
       const container = getArtworkListContainer();
       const entries = container?.entries || [];
-      const entryIds = Array.from(new Set(entries.map(({ id }) => id)));
-      applyUserArtworkGrid(container);
-      if (author.hover) author.hover.applyHoverPreviewBindings(entries);
+      // 作品页（相关作品）需要排除当前作品本身
+      const currentArtworkId = routeType === "artwork" ? routeContext.artworkId : null;
+      const filteredEntries = currentArtworkId
+        ? entries.filter(({ id }) => id !== currentArtworkId)
+        : entries;
+      const entryIds = Array.from(new Set(filteredEntries.map(({ id }) => id)));
+      applyUserArtworkGrid(container, displaySettings);
+      if (author.hover) author.hover.applyHoverPreviewBindings(filteredEntries);
 
-      const settings = author.getSettings();
-      const minPageCount = settings.authorPageMinPageCount;
-      const useHighResThumbnails = settings.authorPageUseHighResThumbnails;
+      const minPageCount = displaySettings.minPageCount;
+      const useHighResThumbnails = displaySettings.useHighResThumbnails;
+      // 相关作品作者各异，需要按 id 单拉详情，避免命中错误的 userId 批量接口。
+      const perId = routeType === "artwork";
       if (minPageCount > 1 || useHighResThumbnails) {
-        await author.ensureDetailsForIds(entryIds, { requireHighRes: useHighResThumbnails });
+        await author.ensureDetailsForIds(entryIds, { requireHighRes: useHighResThumbnails, perId });
       }
 
       if (useHighResThumbnails) {
-        const highResQuality = settings.authorPageHighResThumbnailQuality;
+        const highResQuality = displaySettings.highResQuality;
         if (highResQuality === "medium" || highResQuality === "original") {
-          await Promise.all(entries.map((entry) => ensureHighResUrlsForEntry(entry, highResQuality)));
+          await Promise.all(filteredEntries.map((entry) => ensureHighResUrlsForEntry(entry, highResQuality)));
         }
-        entries.forEach(applyHighResImageToEntry);
+        filteredEntries.forEach((entry) => applyHighResImageToEntry(entry, displaySettings));
       } else {
         restoreUserArtworkCardImages();
       }
 
       if (minPageCount <= 1) {
-        entries.forEach(({ card }) => card.classList.remove(author.HOME_HIDDEN_CLASS));
+        filteredEntries.forEach(({ card }) => card.classList.remove(author.HOME_HIDDEN_CLASS));
         document.querySelectorAll(`.${author.HOME_HIDDEN_CLASS}`).forEach((node) => node.classList.remove(author.HOME_HIDDEN_CLASS));
         return;
       }
 
       const state = author.getState();
-      entries.forEach(({ id, card }) => {
+      filteredEntries.forEach(({ id, card }) => {
         const pageCount = state.workMap[id]?.pageCount;
         if (!Number.isFinite(Number(pageCount))) {
           card.classList.remove(author.HOME_HIDDEN_CLASS);
@@ -273,7 +285,7 @@
         card.classList.toggle(author.HOME_HIDDEN_CLASS, Number(pageCount) < minPageCount);
       });
     } catch (error) {
-      console.warn("[PVM] Failed to apply author homepage enhancements.", error);
+      console.warn("[PVM] Failed to apply page enhancements.", error);
     } finally {
       applyingEnhancements = false;
     }

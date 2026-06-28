@@ -91,41 +91,9 @@
     const target = ensureHoverPreview();
     target.classList.add("has-image");
     target.classList.remove("is-error");
-    const requested = author.HOVER_PREVIEW_QUALITY_LABELS[preview.quality] || preview.quality || "?";
-    const actual = preview.actualQuality && preview.actualQuality !== preview.quality
-      ? `（实际：${author.HOVER_PREVIEW_QUALITY_LABELS[preview.actualQuality] || preview.actualQuality}）`
-      : "";
-    const availableKeys = Object.keys(preview.availableUrls || {});
-    const availableLine = availableKeys.length
-      ? `<div class="pvm-ahp-meta">可用：${availableKeys.map((key) => author.escapeHtml(key)).join(" / ")}</div>`
-      : "";
-    target.innerHTML = `
-      <img class="pvm-ahp-image" src="${author.escapeAttr(preview.image)}" alt="">
-      <div class="pvm-ahp-caption">${author.escapeHtml(preview.title || "预览")}</div>
-      <div class="pvm-ahp-meta">档位：${author.escapeHtml(requested)}${author.escapeHtml(actual)}</div>
-      <div class="pvm-ahp-meta pvm-ahp-dimensions" data-pvm-dimensions>尺寸：加载中…</div>
-      <div class="pvm-ahp-meta pvm-ahp-url" title="${author.escapeAttr(preview.image)}">URL：${author.escapeHtml(author.shortenUrl(preview.image))}</div>
-      ${availableLine}
-    `;
+    target.innerHTML = `<img class="pvm-ahp-image" src="${author.escapeAttr(preview.image)}" alt="">`;
     target.hidden = false;
     positionHoverPreview(event);
-
-    const img = target.querySelector(".pvm-ahp-image");
-    const dimsEl = target.querySelector("[data-pvm-dimensions]");
-    if (img && dimsEl) {
-      const updateDims = () => {
-        if (img.naturalWidth && img.naturalHeight) {
-          dimsEl.textContent = `尺寸：${img.naturalWidth} × ${img.naturalHeight}`;
-        } else {
-          dimsEl.textContent = "尺寸：未知";
-        }
-      };
-      if (img.complete) updateDims();
-      else {
-        img.addEventListener("load", updateDims, { once: true });
-        img.addEventListener("error", () => { dimsEl.textContent = "尺寸：加载失败"; }, { once: true });
-      }
-    }
   }
 
   function hideHoverPreview() {
@@ -140,19 +108,19 @@
   }
 
   function startHoverPreview(entry, event) {
-    const quality = author.getSettings().authorPageHoverPreviewQuality;
+    const quality = author.getDisplaySettingsForRoute()?.hoverQuality;
     if (!quality || quality === "off") return;
     window.clearTimeout(hoverPreviewTimer);
     const token = hoverPreviewToken + 1;
     hoverPreviewToken = token;
     hoverPreviewTimer = window.setTimeout(async () => {
-      renderHoverPreview(`加载预览中… (${author.HOVER_PREVIEW_QUALITY_LABELS[quality] || quality})`, event);
+      renderHoverPreview("加载中…", event);
       const preview = await fetchArtworkPreview(entry.id, quality);
       if (token !== hoverPreviewToken) return;
       if (!preview?.image) {
         const target = ensureHoverPreview();
         target.classList.add("is-error");
-        target.innerHTML = '<div class="pvm-ahp-message">没有拿到可预览图片</div>';
+        target.innerHTML = '<div class="pvm-ahp-message">没有可预览图片</div>';
         target.hidden = false;
         positionHoverPreview(event);
         return;
@@ -161,18 +129,34 @@
     }, 140);
   }
 
+  // 只把绑定挂在卡片里的缩略图节点上（<img>，或者占位 <figure> / <canvas>），
+  // 避免悬停在作品标题、作者名、关注按钮等区域时也弹出预览。
+  function pickThumbnailTarget(entry) {
+    if (!entry?.card) return null;
+    return (
+      entry.card.querySelector("img") ||
+      entry.card.querySelector("figure") ||
+      entry.card.querySelector("canvas") ||
+      null
+    );
+  }
+
   function bindHoverPreviewEntry(entry) {
-    const quality = author.getSettings().authorPageHoverPreviewQuality;
+    const quality = author.getDisplaySettingsForRoute()?.hoverQuality;
     if (!quality || quality === "off") return;
-    if (!entry?.card || entry.card.dataset.pvmHoverPreviewBound === "true") return;
+    if (!entry?.card) return;
+    const target = pickThumbnailTarget(entry);
+    if (!target || target.dataset.pvmHoverPreviewBound === "true") return;
+    // 在 card 上留个标记，防止重复扫描；事件只绑在 thumbnail target 上
     entry.card.dataset.pvmHoverPreviewBound = "true";
-    entry.card.addEventListener("pointerenter", (event) => startHoverPreview(entry, event));
-    entry.card.addEventListener("pointermove", positionHoverPreview);
-    entry.card.addEventListener("pointerleave", hideHoverPreview);
+    target.dataset.pvmHoverPreviewBound = "true";
+    target.addEventListener("pointerenter", (event) => startHoverPreview(entry, event));
+    target.addEventListener("pointermove", positionHoverPreview);
+    target.addEventListener("pointerleave", hideHoverPreview);
   }
 
   function applyHoverPreviewBindings(entries) {
-    const quality = author.getSettings().authorPageHoverPreviewQuality;
+    const quality = author.getDisplaySettingsForRoute()?.hoverQuality;
     if (!quality || quality === "off") {
       hideHoverPreview();
       return;

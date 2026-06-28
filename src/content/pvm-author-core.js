@@ -86,6 +86,37 @@
   author.stripLocale = stripLocale;
   author.getRouteContext = getRouteContext;
 
+  // 把当前路由映射为统一的"页面显示设置"。
+  // - userArtworks 路由读 authorPage*
+  // - artwork 路由读 relatedWorks*
+  // 其它情况返回 null（调用方应跳过相关增强）。
+  function getDisplaySettingsForRoute(routeContext = currentRouteContext) {
+    const s = author.getSettings();
+    if (routeContext?.type === "userArtworks") {
+      return {
+        gridColumns: s.authorPageGridColumns,
+        minPageCount: s.authorPageMinPageCount,
+        useHighResThumbnails: s.authorPageUseHighResThumbnails,
+        highResQuality: s.authorPageHighResThumbnailQuality,
+        hoverEnabled: s.authorPageHoverPreviewEnabled,
+        hoverQuality: s.authorPageHoverPreviewQuality
+      };
+    }
+    if (routeContext?.type === "artwork") {
+      return {
+        gridColumns: s.relatedWorksGridColumns,
+        minPageCount: s.relatedWorksMinPageCount,
+        useHighResThumbnails: s.relatedWorksUseHighResThumbnails,
+        highResQuality: s.relatedWorksHighResThumbnailQuality,
+        hoverEnabled: s.relatedWorksHoverPreviewEnabled,
+        hoverQuality: s.relatedWorksHoverPreviewQuality
+      };
+    }
+    return null;
+  }
+
+  author.getDisplaySettingsForRoute = getDisplaySettingsForRoute;
+
   // --- 通用工具 -----------------------------------------------------------
   function clampNumber(value, min, max, fallback) {
     const number = Number(value);
@@ -298,6 +329,28 @@
   author.fetchWorkDetails = fetchWorkDetails;
   author.fetchHighResUrls = fetchHighResUrls;
 
+  // 跨作者按 id 拉单个作品详情（用于相关作品这种作者不一致的场景）。
+  // 复用 fetchHighResUrls 的缓存以避免重复请求。
+  const singleArtworkCache = new Map();
+  async function fetchArtworkDetail(id) {
+    const key = String(id);
+    if (singleArtworkCache.has(key)) return singleArtworkCache.get(key);
+    const promise = (async () => {
+      try {
+        const body = await fetchJson(`/ajax/illust/${key}`);
+        if (!body || typeof body !== "object") return null;
+        return normalizeWork(body, key);
+      } catch (error) {
+        console.warn("[PVM] Failed to fetch artwork detail for", key, error);
+        return null;
+      }
+    })();
+    singleArtworkCache.set(key, promise);
+    return promise;
+  }
+
+  author.fetchArtworkDetail = fetchArtworkDetail;
+
   // --- 作者作品缓存（chrome.storage.local） ----------------------------
   async function getCache(userId) {
     const key = `pvmAuthorPanel:${userId}`;
@@ -363,6 +416,19 @@
       : "original";
     const highResQuality = author.HIGH_RES_QUALITIES.includes(rawHighResQuality) ? rawHighResQuality : "original";
 
+    const relatedHoverEnabled = raw.relatedWorksHoverPreviewEnabled === true;
+    const rawRelatedHoverQuality = typeof raw.relatedWorksHoverPreviewQuality === "string"
+      ? raw.relatedWorksHoverPreviewQuality
+      : (relatedHoverEnabled ? "original" : "off");
+    let relatedHoverQuality = author.HOVER_PREVIEW_QUALITIES.includes(rawRelatedHoverQuality) ? rawRelatedHoverQuality : "off";
+    if (relatedHoverEnabled && relatedHoverQuality === "off") relatedHoverQuality = "original";
+    if (!relatedHoverEnabled) relatedHoverQuality = "off";
+
+    const rawRelatedHighResQuality = typeof raw.relatedWorksHighResThumbnailQuality === "string"
+      ? raw.relatedWorksHighResThumbnailQuality
+      : "original";
+    const relatedHighResQuality = author.HIGH_RES_QUALITIES.includes(rawRelatedHighResQuality) ? rawRelatedHighResQuality : "original";
+
     return {
       ...(PVM.DEFAULT_SETTINGS || {}),
       ...(raw || {}),
@@ -371,7 +437,15 @@
       authorPageUseHighResThumbnails: raw.authorPageUseHighResThumbnails === true,
       authorPageHighResThumbnailQuality: highResQuality,
       authorPageHoverPreviewEnabled: hoverEnabled,
-      authorPageHoverPreviewQuality: hoverQuality
+      authorPageHoverPreviewQuality: hoverQuality,
+      relatedWorksGridColumns: clampNumber(raw.relatedWorksGridColumns, author.HOME_GRID_MIN_COLUMNS, author.HOME_GRID_MAX_COLUMNS, 6),
+      relatedWorksMinPageCount: clampNumber(raw.relatedWorksMinPageCount, 0, author.HOME_MIN_PAGE_MAX, 0),
+      relatedWorksUseHighResThumbnails: raw.relatedWorksUseHighResThumbnails === true,
+      relatedWorksHighResThumbnailQuality: relatedHighResQuality,
+      relatedWorksHoverPreviewEnabled: relatedHoverEnabled,
+      relatedWorksHoverPreviewQuality: relatedHoverQuality,
+      artworkPageHideAuthorWorks: raw.artworkPageHideAuthorWorks === true,
+      artworkPageHideComments: raw.artworkPageHideComments === true
     };
   }
 
@@ -494,8 +568,9 @@
 
   async function ensureDetailsForIds(ids, options = {}) {
     const requireHighRes = options.requireHighRes === true;
+    const perId = options.perId === true;
     const s = author.getState();
-    if (!s.userId || ids.length === 0) return;
+    if (ids.length === 0) return;
     const missingIds = ids.filter((id) => {
       const work = s.workMap[id];
       if (!work) return true;
@@ -503,15 +578,28 @@
     });
     if (missingIds.length === 0) return;
 
-    const details = await fetchWorkDetails(s.userId, missingIds);
+    // perId=true（如相关作品场景，作者各异）按 id 单拉；
+    // 否则有 userId 时走作者批量接口，没有则按 id 单拉。
+    let details = {};
+    if (!perId && s.userId) {
+      details = await fetchWorkDetails(s.userId, missingIds);
+    } else {
+      const fetched = await Promise.all(missingIds.map((id) => fetchArtworkDetail(id)));
+      fetched.forEach((work) => {
+        if (work && work.id) details[work.id] = work;
+      });
+    }
+
     const next = author.getState();
     next.workMap = { ...next.workMap, ...details };
-    await setCache(next.userId, {
-      userId: next.userId,
-      userName: next.userName,
-      ids: next.ids,
-      workMap: next.workMap
-    });
+    if (!perId && next.userId) {
+      await setCache(next.userId, {
+        userId: next.userId,
+        userName: next.userName,
+        ids: next.ids,
+        workMap: next.workMap
+      });
+    }
   }
 
   function workForId(id) {

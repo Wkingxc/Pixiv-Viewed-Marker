@@ -286,6 +286,11 @@
   display: none !important;
 }
 
+.pvm-hidden-author-works-banner,
+.pvm-hidden-comments-section {
+  display: none !important;
+}
+
 #pvm-author-hover-preview {
   position: fixed;
   left: 0;
@@ -311,47 +316,18 @@
 .pvm-ahp-image {
   display: block;
   max-width: calc(min(520px, 46vw) - 20px);
-  max-height: calc(70vh - 46px);
+  max-height: calc(70vh - 20px);
   border-radius: 11px;
   object-fit: contain;
 }
 
-.pvm-ahp-caption,
 .pvm-ahp-message {
   max-width: calc(min(520px, 46vw) - 20px);
+  min-width: 132px;
+  padding: 12px 10px;
   color: rgba(248, 243, 246, 0.76);
   font: 12px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif;
   font-weight: 800;
-}
-
-.pvm-ahp-caption {
-  margin-top: 7px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pvm-ahp-meta {
-  max-width: calc(min(520px, 46vw) - 20px);
-  margin-top: 4px;
-  color: rgba(248, 243, 246, 0.62);
-  font: 11px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pvm-ahp-meta.pvm-ahp-url {
-  color: rgba(248, 243, 246, 0.48);
-  font-weight: 500;
-  word-break: break-all;
-  white-space: normal;
-}
-
-.pvm-ahp-message {
-  min-width: 132px;
-  padding: 12px 10px;
   text-align: center;
 }
 

@@ -21,8 +21,9 @@ Pixiv-Viewed-Marker/
 │   │   ├── author-panel.css            # 作品页悬浮面板 + 作者页网格的样式
 │   │   ├── pvm-author-core.js          # 共享状态、API 客户端、缓存、settings/uiState 持久化、quality 工具
 │   │   ├── pvm-hover-preview.js        # 作者页缩略图悬停预览浮层
-│   │   ├── pvm-author-page.js          # 作者页网格列数 / 最低页数过滤 / 高清缩略图替换
+│   │   ├── pvm-author-page.js          # 作者页 / 作品页"相关作品"网格列数 / 最低页数过滤 / 高清缩略图替换
 │   │   ├── pvm-artwork-panel.js        # 作品页悬浮"作者作品速览"面板：渲染、事件、缩放、横向拖动
+│   │   ├── pvm-artwork-sections.js     # 作品页区块控制：隐藏作者其他作品横幅 / 评论区
 │   │   └── pvm-author-bootstrap.js     # 路由调度、watchRoute/watchDom/watchStorage/watchWindow、start
 │   ├── popup/
 │   │   ├── popup.html
@@ -49,7 +50,8 @@ Pixiv-Viewed-Marker/
 4. `content/pvm-hover-preview.js`：在 `PVM.author.hover` 下注册悬停预览浮层。
 5. `content/pvm-author-page.js`：在 `PVM.author.authorPage` 下注册作者页增强（grid 列数 / 最低页数 / 高清缩略图）。
 6. `content/pvm-artwork-panel.js`：在 `PVM.author.artworkPanel` 下注册作品页悬浮面板。
-7. `content/pvm-author-bootstrap.js`：调用以上模块完成路由调度、watcher 与 `start()` 启动。
+7. `content/pvm-artwork-sections.js`：在 `PVM.author.artworkSections` 下注册作品页区块隐藏（作者其他作品横幅 / 评论区）。
+8. `content/pvm-author-bootstrap.js`：调用以上模块完成路由调度、watcher 与 `start()` 启动。
 
 每个 `pvm-*.js` 文件都以 `(function (global) { ... })(globalThis)` 包裹，避免污染全局。文件之间只通过 `PVM.author.*` 暴露的函数沟通；共享可变状态由 `pvm-author-core.js` 用 getter / setter / patch 函数对外暴露，避免每个文件持有副本。
 
@@ -128,9 +130,9 @@ Pixiv-Viewed-Marker/
 
 - 常量：`PAGE_SIZE`、`SCALE_STEPS`、HOME_GRID 系列、Quality 字典等。
 - 共享可变状态：`settings` / `state` / `uiState` / `currentRouteContext` / `currentArtworkId`，通过 `getSettings/setSettings/getState/patchState/...` 暴露。
-- 通用工具：`stripLocale`、`getRouteContext`、`escapeHtml`、`chunk`、`clampNumber` 等。
+- 通用工具：`stripLocale`、`getRouteContext`、`getDisplaySettingsForRoute`（把当前路由映射为统一的"页面显示设置"——作者页读 `authorPage*`、作品页读 `relatedWorks*`）、`escapeHtml`、`chunk`、`clampNumber` 等。
 - Quality 工具：`pickImage` / `pickPreviewImage` / `pickHighResImage` / `resolveQualityUrl` / `normalizeWork`。
-- API 客户端：`fetchJson` / `fetchCurrentArtwork` / `fetchAuthorWorkIds` / `fetchWorkDetails` / `fetchHighResUrls`（带 in-memory 缓存）。
+- API 客户端：`fetchJson` / `fetchCurrentArtwork` / `fetchAuthorWorkIds` / `fetchWorkDetails` / `fetchHighResUrls` / `fetchArtworkDetail`（按 id 单拉，跨作者场景用，带 in-memory 缓存）。
 - chrome.storage 持久化：`loadUiState` / `saveUiState` / `loadSettings` / `migrateLegacyHomeSettings` / `normalizeAuthorSettings` / `getCache` / `setCache`。
 - 详情加载：`fetchAuthorWorksByUserId` / `fetchAuthorWorksForArtwork` / `ensureDetailsForPage` / `preloadPageDetails` / `ensureDetailsForIds` / `workForId` / `currentPageFor` / `fallbackWorksFromDom` / `getViewedSet`。
 
@@ -143,14 +145,17 @@ Pixiv-Viewed-Marker/
 
 ### `pvm-author-page.js`
 
-挂在 `PVM.author.authorPage` 下，负责作者页 (`/users/{id}` 及其子页) 列表的增强：
+挂在 `PVM.author.authorPage` 下，负责作者页 (`/users/{id}` 及其子页) 列表，以及作品页 (`/artworks/{id}`) "相关作品" 列表的增强：
 
-- 在 `/users/{id}`、`/users/{id}/artworks`、`/users/{id}/illustrations`、`/users/{id}/manga` 以及其子路径生效；控制入口在扩展 popup 的"作者页"页签。
-- 通过扫描 `a[href*="/artworks/"]` 找到当前页面作品卡片，并选择包含最多作品卡片的父容器作为作品网格容器。
+- 在 `/users/{id}`、`/users/{id}/artworks`、`/users/{id}/illustrations`、`/users/{id}/manga` 以及其子路径生效（读 `authorPage*` 设置）；
+  也在 `/artworks/{id}` 生效，作用于"相关作品"列表（读 `relatedWorks*` 设置）。具体配置由 `author.getDisplaySettingsForRoute()` 按当前路由选择。
+- 通过扫描 `a[href*="/artworks/"]` 找到当前页面作品卡片，并选择包含最多作品卡片的父容器作为作品网格容器；
+  在 `/artworks/{id}` 路由会过滤掉指向当前作品自身的卡片，只保留相关作品。
 - 给作品网格容器添加 `.pvm-author-home-grid`，通过 CSS 变量控制列数和缩放比例。
 - `每行作品数` 设置调整作品列表列数，默认使用已有页面缩略图做 CSS 等比缩放，不重新请求图片。
-- `高清缩略图` 开启后，会按当前作者页 DOM 卡片补拉作品详情，并用 Pixiv 接口返回的更清晰封面替换卡片图片；关闭或离开作者页时恢复原始 `src` / `srcset` / `sizes` / lazy loading 属性。
-- `最低页数` 按输入阈值隐藏低页数作品，页数来自 Pixiv 作者作品详情接口。
+- `高清缩略图` 开启后，会按当前 DOM 卡片补拉作品详情，并用 Pixiv 接口返回的更清晰封面替换卡片图片；关闭或离开对应路由时恢复原始 `src` / `srcset` / `sizes` / lazy loading 属性。
+  - 作者页（同一作者）走 `/ajax/user/{userId}/profile/illusts` 批量接口；相关作品（作者各异）走 `ensureDetailsForIds(..., { perId: true })`，按 id 调 `fetchArtworkDetail`，复用 `singleArtworkCache`。
+- `最低页数` 按输入阈值隐藏低页数作品，页数来自 Pixiv 作品详情接口。
 - 暴露 `applyUserArtworkPageEnhancements()` / `scheduleUserArtworkEnhancements(delay)` / `clearUserArtworkPageEnhancements()` / `getArtworkListContainer()`。
 
 ### `pvm-artwork-panel.js`
@@ -168,6 +173,15 @@ Pixiv-Viewed-Marker/
 - 已访问作品跟随原插件设置，只做标题变色/边框，不额外显示"已看"徽章。
 - 卡片支持鼠标中键 / Ctrl·Cmd+左键在后台新标签打开：通过 `chrome.runtime.sendMessage` 把 URL 发给 background，由 background 调 `chrome.tabs.create({ active: false, index: tab.index + 1, openerTabId })`，避免 `window.open` 强制前台行为以及"中键自动滚动"导致的双击问题。
 - 暴露 `renderPanel()` / `applyPanelUi()` / `setPanelCollapsed(boolean)` / `getPanel()`。
+
+### `pvm-artwork-sections.js`
+
+挂在 `PVM.author.artworkSections` 下，只在 `/artworks/{id}` 路由生效，根据设置隐藏两个区块：
+
+- `artworkPageHideAuthorWorks`：找到包含当前作者主页链接 + 多张该作者其它作品缩略图的 `<section>`，加上 `.pvm-hidden-author-works-banner`（CSS 中 `display: none !important`）。当前作者 ID 来自 `author.getState().userId`（由 `pvm-author-bootstrap` 在 artwork 路由拉作者作品索引时填入）。
+- `artworkPageHideComments`：扫描 `<main>` 下含 `h1/h2/h3` 文本匹配 `コメント / Comments / 评论 / 댓글` 的 section，加上 `.pvm-hidden-comments-section`。
+- 关闭对应开关或离开 artwork 路由时移除上述 class，DOM 不会被破坏，只是 `display: none`。
+- 暴露 `apply()` / `scheduleApply(delay)` / `clear()`。bootstrap 在路由切换、`MutationObserver` 触发的 DOM 变化和 `chrome.storage.onChanged` 中调用 `scheduleApply(0)`。
 
 ### `pvm-author-bootstrap.js`
 
@@ -194,11 +208,11 @@ Pixiv-Viewed-Marker/
 popup 提供四个标签页：
 
 - 标记：颜色、标题变色、图片遮罩、隐藏已访问作品
-- 作者页：每行作品数（`−` / 数字 / `+` 步进按钮）、最低页数过滤、高清缩略图开关、实验性悬停预览开关
-- 排除：按页面 URL 禁用当前页面标记渲染
-- 备份：导出、导入、清空本地记录
+- 作者页：每行作品数（`−` / 数字 / `+` 步进按钮）、最低页数过滤、高清缩略图开关、悬停预览开关（作用于作者页 `authorPage*`）
+- 作品页：顶部两个开关 `隐藏作者其他作品横幅` / `隐藏评论区`（作用于作品页 `artworkPage*`，由 `pvm-artwork-sections.js` 实现）；下方"相关作品"子区域提供每行作品数、最低页数、悬停预览开关（作用于作品页底部相关作品列表 `relatedWorks*`，不含高清缩略图）
+- 其他：合并了原"排除"和"备份"两个页签。排除按页面 URL 禁用当前页面标记渲染；备份提供导出 / 导入 / 清空本地记录
 
-打开 popup 时根据当前激活标签页的 URL 自动聚焦：作者页路由聚焦"作者页"页签，其它情况聚焦"标记"。
+打开 popup 时根据当前激活标签页的 URL 自动聚焦：作者页路由聚焦"作者页"，作品页路由聚焦"作品页"，其它情况聚焦"标记"。
 
 历史导入只作为首次初始化入口，完成后会移除 `history` 权限。
 
@@ -221,7 +235,7 @@ pvmAuthorPanelUi
 
 `exclusions.pages` 使用 pathname 作为 key。
 
-`settings` 包含访问标记设置和作者页显示设置；作者页显示字段包括 `authorPageGridColumns`、`authorPageMinPageCount`、`authorPageUseHighResThumbnails`、`authorPageHighResThumbnailQuality`、`authorPageHoverPreviewEnabled`、`authorPageHoverPreviewQuality`。`authorPageHighResThumbnailQuality` 默认为 `"original"`，`authorPageHoverPreviewQuality` 关闭时为 `"off"`、打开时为 `"original"`。
+`settings` 包含访问标记设置、作者页显示设置、相关作品显示设置和作品页区块开关；作者页显示字段包括 `authorPageGridColumns`、`authorPageMinPageCount`、`authorPageUseHighResThumbnails`、`authorPageHighResThumbnailQuality`、`authorPageHoverPreviewEnabled`、`authorPageHoverPreviewQuality`；相关作品显示字段为同名 `relatedWorks*` 系列，但 popup 不暴露 `relatedWorksUseHighResThumbnails`（始终为 `false`）；作品页区块开关包括 `artworkPageHideAuthorWorks`、`artworkPageHideComments`。`*HighResThumbnailQuality` 默认为 `"original"`，`*HoverPreviewQuality` 关闭时为 `"off"`、打开时为 `"original"`。
 
 `pvmAuthorPanel:{userId}` 是作者作品速览缓存，包含作者作品 ID 索引、已加载作品详情和缓存时间。
 

@@ -15,6 +15,13 @@
   const authorMinPageCountEl = document.getElementById("authorMinPageCount");
   const authorHighResEl = document.getElementById("authorHighRes");
   const authorHoverPreviewEl = document.getElementById("authorHoverPreview");
+  const relatedGridColumnsEl = document.getElementById("relatedGridColumns");
+  const relatedGridDecrementEl = document.querySelector('[data-action="related-grid-decrement"]');
+  const relatedGridIncrementEl = document.querySelector('[data-action="related-grid-increment"]');
+  const relatedMinPageCountEl = document.getElementById("relatedMinPageCount");
+  const relatedHoverPreviewEl = document.getElementById("relatedHoverPreview");
+  const artworkHideAuthorWorksEl = document.getElementById("artworkHideAuthorWorks");
+  const artworkHideCommentsEl = document.getElementById("artworkHideComments");
   const excludeFormEl = document.getElementById("excludeForm");
   const excludeUrlEl = document.getElementById("excludeUrl");
   const excludedPagesEl = document.getElementById("excludedPages");
@@ -61,13 +68,21 @@
     authorMinPageCountEl.value = String(clampNumber(settings.authorPageMinPageCount, 0, 999, 0));
     authorHighResEl.checked = Boolean(settings.authorPageUseHighResThumbnails);
     authorHoverPreviewEl.checked = Boolean(settings.authorPageHoverPreviewEnabled);
+    relatedGridColumnsEl.value = String(clampNumber(settings.relatedWorksGridColumns, 2, 6, 6));
+    relatedMinPageCountEl.value = String(clampNumber(settings.relatedWorksMinPageCount, 0, 999, 0));
+    relatedHoverPreviewEl.checked = Boolean(settings.relatedWorksHoverPreviewEnabled);
+    artworkHideAuthorWorksEl.checked = Boolean(settings.artworkPageHideAuthorWorks);
+    artworkHideCommentsEl.checked = Boolean(settings.artworkPageHideComments);
     updateGridStepperState();
   }
 
   function updateGridStepperState() {
-    const value = clampNumber(authorGridColumnsEl.value, 2, 6, 6);
-    authorGridDecrementEl.disabled = value <= 2;
-    authorGridIncrementEl.disabled = value >= 6;
+    const authorValue = clampNumber(authorGridColumnsEl.value, 2, 6, 6);
+    authorGridDecrementEl.disabled = authorValue <= 2;
+    authorGridIncrementEl.disabled = authorValue >= 6;
+    const relatedValue = clampNumber(relatedGridColumnsEl.value, 2, 6, 6);
+    relatedGridDecrementEl.disabled = relatedValue <= 2;
+    relatedGridIncrementEl.disabled = relatedValue >= 6;
   }
 
   function adjustGridColumns(delta) {
@@ -77,6 +92,17 @@
       return;
     }
     authorGridColumnsEl.value = String(next);
+    updateGridStepperState();
+    scheduleSettingsSave();
+  }
+
+  function adjustRelatedGridColumns(delta) {
+    const next = clampNumber(Number(relatedGridColumnsEl.value) + delta, 2, 6, 6);
+    if (String(next) === relatedGridColumnsEl.value) {
+      updateGridStepperState();
+      return;
+    }
+    relatedGridColumnsEl.value = String(next);
     updateGridStepperState();
     scheduleSettingsSave();
   }
@@ -137,12 +163,22 @@
         authorPageUseHighResThumbnails: authorHighResEl.checked,
         authorPageHighResThumbnailQuality: "original",
         authorPageHoverPreviewEnabled: authorHoverPreviewEl.checked,
-        authorPageHoverPreviewQuality: authorHoverPreviewEl.checked ? "original" : "off"
+        authorPageHoverPreviewQuality: authorHoverPreviewEl.checked ? "original" : "off",
+        relatedWorksGridColumns: clampNumber(relatedGridColumnsEl.value, 2, 6, 6),
+        relatedWorksMinPageCount: clampNumber(relatedMinPageCountEl.value, 0, 999, 0),
+        relatedWorksUseHighResThumbnails: false,
+        relatedWorksHighResThumbnailQuality: "original",
+        relatedWorksHoverPreviewEnabled: relatedHoverPreviewEl.checked,
+        relatedWorksHoverPreviewQuality: relatedHoverPreviewEl.checked ? "original" : "off",
+        artworkPageHideAuthorWorks: artworkHideAuthorWorksEl.checked,
+        artworkPageHideComments: artworkHideCommentsEl.checked
       };
 
       currentData.settings = await PVM.storage.saveSettings(settings);
       authorGridColumnsEl.value = String(currentData.settings.authorPageGridColumns);
       authorMinPageCountEl.value = String(currentData.settings.authorPageMinPageCount);
+      relatedGridColumnsEl.value = String(currentData.settings.relatedWorksGridColumns);
+      relatedMinPageCountEl.value = String(currentData.settings.relatedWorksMinPageCount);
       updateGridStepperState();
       colorValueEl.textContent = visitedColorEl.value.toUpperCase();
       overlayValueEl.textContent = `${Math.round(Number(overlayOpacityEl.value) * 100)}%`;
@@ -259,6 +295,7 @@
       const url = tabs?.[0]?.url || "";
       const parsed = PVM.parsePixivUrl(url);
       if (parsed?.type === "user") activateTab("author");
+      else if (parsed?.type === "artwork") activateTab("related");
     } catch (_error) {
       // ignore: 没有标签权限或非 Pixiv 页面，保持默认 tab。
     }
@@ -266,13 +303,15 @@
 
   autoSelectTabForActiveTab();
 
-  [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl, authorGridColumnsEl, authorMinPageCountEl, authorHighResEl, authorHoverPreviewEl].forEach((control) => {
+  [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl, authorGridColumnsEl, authorMinPageCountEl, authorHighResEl, authorHoverPreviewEl, relatedGridColumnsEl, relatedMinPageCountEl, relatedHoverPreviewEl, artworkHideAuthorWorksEl, artworkHideCommentsEl].forEach((control) => {
     control.addEventListener("input", scheduleSettingsSave);
     control.addEventListener("change", scheduleSettingsSave);
   });
 
   authorGridDecrementEl.addEventListener("click", () => adjustGridColumns(-1));
   authorGridIncrementEl.addEventListener("click", () => adjustGridColumns(1));
+  relatedGridDecrementEl.addEventListener("click", () => adjustRelatedGridColumns(-1));
+  relatedGridIncrementEl.addEventListener("click", () => adjustRelatedGridColumns(1));
 
   excludeFormEl.addEventListener("submit", (event) => {
     handleExcludeSubmit(event).catch((error) => setStatus(error.message || "排除失败。"));

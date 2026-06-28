@@ -14,6 +14,17 @@
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 body {
   width: 380px;
   margin: 0;
@@ -23,6 +34,14 @@ body {
     radial-gradient(circle at 95% 10%, rgba(109, 179, 255, 0.16), transparent 28%),
     linear-gradient(150deg, #fff, var(--paper));
   font: 14px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .shell {
@@ -300,6 +319,14 @@ summary {
   margin: 0;
   padding: 0 13px 13px;
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.plain-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .plain-list li {
