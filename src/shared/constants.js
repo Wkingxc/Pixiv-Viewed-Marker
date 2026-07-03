@@ -25,7 +25,9 @@
     relatedWorksHoverPreviewEnabled: false,
     relatedWorksHoverPreviewQuality: "off",
     artworkPageHideAuthorWorks: false,
-    artworkPageHideComments: false
+    artworkPageHideComments: false,
+    smoothScrollEnabled: false,
+    smoothScrollScreens: 1.0
   };
 
   PVM.DEFAULT_EXCLUSIONS = {

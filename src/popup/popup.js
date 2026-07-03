@@ -23,6 +23,9 @@
   const relatedHoverPreviewEl = document.getElementById("relatedHoverPreview");
   const artworkHideAuthorWorksEl = document.getElementById("artworkHideAuthorWorks");
   const artworkHideCommentsEl = document.getElementById("artworkHideComments");
+  const smoothScrollEnabledEl = document.getElementById("smoothScrollEnabled");
+  const smoothScrollScreensEl = document.getElementById("smoothScrollScreens");
+  const smoothScrollValueEl = document.getElementById("smoothScrollValue");
   const excludeFormEl = document.getElementById("excludeForm");
   const excludeUrlEl = document.getElementById("excludeUrl");
   const excludedPagesEl = document.getElementById("excludedPages");
@@ -56,6 +59,12 @@
     return Math.min(Math.max(Math.round(number), min), max);
   }
 
+  function clampFloat(value, min, max, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.min(Math.max(number, min), max);
+  }
+
   function renderSettings(settings) {
     const hex = colorToHex(settings.artworkVisitedColor);
     visitedColorEl.value = hex;
@@ -75,8 +84,12 @@
     relatedHoverPreviewEl.checked = Boolean(settings.relatedWorksHoverPreviewEnabled);
     artworkHideAuthorWorksEl.checked = Boolean(settings.artworkPageHideAuthorWorks);
     artworkHideCommentsEl.checked = Boolean(settings.artworkPageHideComments);
+    smoothScrollEnabledEl.checked = Boolean(settings.smoothScrollEnabled);
+    smoothScrollScreensEl.value = String(clampFloat(settings.smoothScrollScreens, 0.3, 3.0, 1.0));
+    updateSmoothScrollLabel();
     updateGridStepperState();
     updateRelatedControlsState();
+    updateSmoothScrollControlsState();
   }
 
   function updateGridStepperState() {
@@ -95,6 +108,15 @@
     relatedGridIncrementEl.disabled = disabled || clampNumber(relatedGridColumnsEl.value, 2, 6, 6) >= 6;
     relatedMinPageCountEl.disabled = disabled;
     relatedHoverPreviewEl.disabled = disabled;
+  }
+
+  function updateSmoothScrollLabel() {
+    const value = clampFloat(smoothScrollScreensEl.value, 0.3, 3.0, 1.0);
+    smoothScrollValueEl.textContent = `${value.toFixed(1)} 屏`;
+  }
+
+  function updateSmoothScrollControlsState() {
+    smoothScrollScreensEl.disabled = !smoothScrollEnabledEl.checked;
   }
 
   function adjustGridColumns(delta) {
@@ -188,7 +210,9 @@
         relatedWorksHoverPreviewEnabled: relatedHoverPreviewEl.checked,
         relatedWorksHoverPreviewQuality: relatedHoverPreviewEl.checked ? "original" : "off",
         artworkPageHideAuthorWorks: artworkHideAuthorWorksEl.checked,
-        artworkPageHideComments: artworkHideCommentsEl.checked
+        artworkPageHideComments: artworkHideCommentsEl.checked,
+        smoothScrollEnabled: smoothScrollEnabledEl.checked,
+        smoothScrollScreens: clampFloat(smoothScrollScreensEl.value, 0.3, 3.0, 1.0)
       };
 
       currentData.settings = await PVM.storage.saveSettings(settings);
@@ -198,6 +222,7 @@
       relatedMinPageCountEl.value = String(currentData.settings.relatedWorksMinPageCount);
       updateGridStepperState();
       updateRelatedControlsState();
+      updateSmoothScrollControlsState();
       colorValueEl.textContent = visitedColorEl.value.toUpperCase();
       overlayValueEl.textContent = `${Math.round(Number(overlayOpacityEl.value) * 100)}%`;
       setStatus("设置已保存。");
@@ -321,10 +346,14 @@
 
   autoSelectTabForActiveTab();
 
-  [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl, authorGridColumnsEl, authorMinPageCountEl, authorHighResEl, authorHoverPreviewEl, relatedWorksEnabledEl, relatedGridColumnsEl, relatedMinPageCountEl, relatedHoverPreviewEl, artworkHideAuthorWorksEl, artworkHideCommentsEl].forEach((control) => {
-    control.addEventListener("input", scheduleSettingsSave);
+  [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl, authorGridColumnsEl, authorMinPageCountEl, authorHighResEl, authorHoverPreviewEl, relatedWorksEnabledEl, relatedGridColumnsEl, relatedMinPageCountEl, relatedHoverPreviewEl, artworkHideAuthorWorksEl, artworkHideCommentsEl, smoothScrollEnabledEl, smoothScrollScreensEl].forEach((control) => {
+    control.addEventListener("input", () => {
+      if (control === smoothScrollScreensEl) updateSmoothScrollLabel();
+      scheduleSettingsSave();
+    });
     control.addEventListener("change", () => {
       if (control === relatedWorksEnabledEl) updateRelatedControlsState();
+      if (control === smoothScrollEnabledEl) updateSmoothScrollControlsState();
       scheduleSettingsSave();
     });
   });

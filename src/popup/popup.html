@@ -156,6 +156,21 @@
       </section>
 
       <section class="tab-panel" id="tab-other">
+        <section class="card switches">
+          <label class="switch-row">
+            <span>
+              <strong>平滑滚轮</strong>
+            </span>
+            <input id="smoothScrollEnabled" type="checkbox">
+          </label>
+
+          <label class="range-row">
+            <span>翻动幅度</span>
+            <input id="smoothScrollScreens" type="range" min="0.3" max="3.0" step="0.1" value="1.0">
+            <output id="smoothScrollValue">1.0 屏</output>
+          </label>
+        </section>
+
         <section class="card exclude-card">
           <h2>排除页面渲染</h2>
           <p>输入页面 URL。命中这个页面时不变色、不遮罩、不隐藏，例如你的收藏页。</p>

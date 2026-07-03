@@ -37,6 +37,7 @@
         "src/shared/url-parser.js",
         "src/shared/storage.js",
         "src/content/content.js",
+        "src/content/pvm-smooth-scroll.js",
         "src/content/pvm-author-core.js",
         "src/content/pvm-hover-preview.js",
         "src/content/pvm-author-page.js",
