@@ -7,6 +7,7 @@
   let applyingEnhancements = false;
 
   const HOME_CARD_CLASS = "pvm-author-home-card";
+  const HOME_EXTRA_CLASS = author.HOME_EXTRA_CLASS || "pvm-author-home-extra";
 
   // --- DOM 扫描：当前作者页作品卡片网格 ----------------------------------
   function getArtworkListContainer() {
@@ -190,6 +191,7 @@
           delete node.dataset.pvmOriginalDisplay;
         }
         node.querySelectorAll(`.${HOME_CARD_CLASS}`).forEach((card) => card.classList.remove(HOME_CARD_CLASS));
+        node.querySelectorAll(`.${HOME_EXTRA_CLASS}`).forEach((extra) => extra.classList.remove(HOME_EXTRA_CLASS));
       }
     });
 
@@ -206,11 +208,17 @@
     }
 
     // 只把真正的作品卡片打上 .pvm-author-home-card 类；
-    // 非卡片节点（如分页 nav、标题）CSS 里会让它独占整行，避免被网格挤掉。
+    // 只有本轮已知的非卡片节点打 .pvm-author-home-extra 并独占整行。
+    // 不用 CSS 负选择器兜底，避免 Pixiv 无限加载的新卡片在下一轮扫描前短暂占满整行。
     const cards = new Set(container.entries.map((entry) => entry.card).filter(Boolean));
     Array.from(parent.children).forEach((child) => {
-      if (cards.has(child)) child.classList.add(HOME_CARD_CLASS);
-      else child.classList.remove(HOME_CARD_CLASS);
+      if (cards.has(child)) {
+        child.classList.add(HOME_CARD_CLASS);
+        child.classList.remove(HOME_EXTRA_CLASS);
+      } else {
+        child.classList.remove(HOME_CARD_CLASS);
+        child.classList.add(HOME_EXTRA_CLASS);
+      }
     });
   }
 
@@ -233,6 +241,9 @@
     });
     document.querySelectorAll(`.${HOME_CARD_CLASS}`).forEach((node) => {
       node.classList.remove(HOME_CARD_CLASS);
+    });
+    document.querySelectorAll(`.${HOME_EXTRA_CLASS}`).forEach((node) => {
+      node.classList.remove(HOME_EXTRA_CLASS);
     });
     document.querySelectorAll(`.${author.HOME_HIDDEN_CLASS}`).forEach((node) => {
       node.classList.remove(author.HOME_HIDDEN_CLASS);

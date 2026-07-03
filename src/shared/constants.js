@@ -17,6 +17,7 @@
     authorPageHighResThumbnailQuality: "original",
     authorPageHoverPreviewEnabled: false,
     authorPageHoverPreviewQuality: "off",
+    relatedWorksEnabled: true,
     relatedWorksGridColumns: 6,
     relatedWorksMinPageCount: 0,
     relatedWorksUseHighResThumbnails: false,

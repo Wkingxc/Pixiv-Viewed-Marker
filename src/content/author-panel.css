@@ -378,14 +378,15 @@
 
 /* 用 zoom 而不是 transform: scale() —— zoom 会真实增加占位空间，
    底部的分页 nav 会被自然地向下推开，不会被卡片视觉溢出遮住。 */
-.pvm-author-home-grid > .pvm-author-home-card {
+.pvm-author-home-grid > .pvm-author-home-card,
+.pvm-author-home-grid > :has(a[href*="/artworks/"]) {
   width: 100%;
   zoom: var(--pvm-author-home-scale, 1);
 }
 
-/* 同级非卡片节点（如标题、空状态提示）让它独占整行显示，
-   避免被网格挤进一列里看起来"不见了"。 */
-.pvm-author-home-grid > :not(.pvm-author-home-card) {
+/* 已识别的同级非卡片节点（如标题、空状态提示）独占整行显示；
+   不使用负选择器，避免 Pixiv 无限加载的新作品卡片短暂占满整行。 */
+.pvm-author-home-grid > .pvm-author-home-extra {
   grid-column: 1 / -1;
   justify-self: stretch;
 }

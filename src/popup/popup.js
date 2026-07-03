@@ -15,6 +15,7 @@
   const authorMinPageCountEl = document.getElementById("authorMinPageCount");
   const authorHighResEl = document.getElementById("authorHighRes");
   const authorHoverPreviewEl = document.getElementById("authorHoverPreview");
+  const relatedWorksEnabledEl = document.getElementById("relatedWorksEnabled");
   const relatedGridColumnsEl = document.getElementById("relatedGridColumns");
   const relatedGridDecrementEl = document.querySelector('[data-action="related-grid-decrement"]');
   const relatedGridIncrementEl = document.querySelector('[data-action="related-grid-increment"]');
@@ -68,12 +69,14 @@
     authorMinPageCountEl.value = String(clampNumber(settings.authorPageMinPageCount, 0, 999, 0));
     authorHighResEl.checked = Boolean(settings.authorPageUseHighResThumbnails);
     authorHoverPreviewEl.checked = Boolean(settings.authorPageHoverPreviewEnabled);
+    relatedWorksEnabledEl.checked = settings.relatedWorksEnabled !== false;
     relatedGridColumnsEl.value = String(clampNumber(settings.relatedWorksGridColumns, 2, 6, 6));
     relatedMinPageCountEl.value = String(clampNumber(settings.relatedWorksMinPageCount, 0, 999, 0));
     relatedHoverPreviewEl.checked = Boolean(settings.relatedWorksHoverPreviewEnabled);
     artworkHideAuthorWorksEl.checked = Boolean(settings.artworkPageHideAuthorWorks);
     artworkHideCommentsEl.checked = Boolean(settings.artworkPageHideComments);
     updateGridStepperState();
+    updateRelatedControlsState();
   }
 
   function updateGridStepperState() {
@@ -83,6 +86,15 @@
     const relatedValue = clampNumber(relatedGridColumnsEl.value, 2, 6, 6);
     relatedGridDecrementEl.disabled = relatedValue <= 2;
     relatedGridIncrementEl.disabled = relatedValue >= 6;
+  }
+
+  function updateRelatedControlsState() {
+    const disabled = !relatedWorksEnabledEl.checked;
+    relatedGridColumnsEl.disabled = disabled;
+    relatedGridDecrementEl.disabled = disabled || clampNumber(relatedGridColumnsEl.value, 2, 6, 6) <= 2;
+    relatedGridIncrementEl.disabled = disabled || clampNumber(relatedGridColumnsEl.value, 2, 6, 6) >= 6;
+    relatedMinPageCountEl.disabled = disabled;
+    relatedHoverPreviewEl.disabled = disabled;
   }
 
   function adjustGridColumns(delta) {
@@ -168,6 +180,7 @@
         authorPageHighResThumbnailQuality: "original",
         authorPageHoverPreviewEnabled: authorHoverPreviewEl.checked,
         authorPageHoverPreviewQuality: authorHoverPreviewEl.checked ? "original" : "off",
+        relatedWorksEnabled: relatedWorksEnabledEl.checked,
         relatedWorksGridColumns: clampNumber(relatedGridColumnsEl.value, 2, 6, 6),
         relatedWorksMinPageCount: clampNumber(relatedMinPageCountEl.value, 0, 999, 0),
         relatedWorksUseHighResThumbnails: false,
@@ -184,6 +197,7 @@
       relatedGridColumnsEl.value = String(currentData.settings.relatedWorksGridColumns);
       relatedMinPageCountEl.value = String(currentData.settings.relatedWorksMinPageCount);
       updateGridStepperState();
+      updateRelatedControlsState();
       colorValueEl.textContent = visitedColorEl.value.toUpperCase();
       overlayValueEl.textContent = `${Math.round(Number(overlayOpacityEl.value) * 100)}%`;
       setStatus("设置已保存。");
@@ -307,9 +321,12 @@
 
   autoSelectTabForActiveTab();
 
-  [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl, authorGridColumnsEl, authorMinPageCountEl, authorHighResEl, authorHoverPreviewEl, relatedGridColumnsEl, relatedMinPageCountEl, relatedHoverPreviewEl, artworkHideAuthorWorksEl, artworkHideCommentsEl].forEach((control) => {
+  [visitedColorEl, markTitleEl, markImageEl, hideViewedEl, overlayOpacityEl, authorGridColumnsEl, authorMinPageCountEl, authorHighResEl, authorHoverPreviewEl, relatedWorksEnabledEl, relatedGridColumnsEl, relatedMinPageCountEl, relatedHoverPreviewEl, artworkHideAuthorWorksEl, artworkHideCommentsEl].forEach((control) => {
     control.addEventListener("input", scheduleSettingsSave);
-    control.addEventListener("change", scheduleSettingsSave);
+    control.addEventListener("change", () => {
+      if (control === relatedWorksEnabledEl) updateRelatedControlsState();
+      scheduleSettingsSave();
+    });
   });
 
   authorGridDecrementEl.addEventListener("click", () => adjustGridColumns(-1));

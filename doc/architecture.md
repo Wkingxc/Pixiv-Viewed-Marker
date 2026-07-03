@@ -148,10 +148,10 @@ Pixiv-Viewed-Marker/
 挂在 `PVM.author.authorPage` 下，负责作者页 (`/users/{id}` 及其子页) 列表，以及作品页 (`/artworks/{id}`) "相关作品" 列表的增强：
 
 - 在 `/users/{id}`、`/users/{id}/artworks`、`/users/{id}/illustrations`、`/users/{id}/manga` 以及其子路径生效（读 `authorPage*` 设置）；
-  也在 `/artworks/{id}` 生效，作用于"相关作品"列表（读 `relatedWorks*` 设置）。具体配置由 `author.getDisplaySettingsForRoute()` 按当前路由选择。
+  也在 `/artworks/{id}` 生效，作用于"相关作品"列表（读 `relatedWorks*` 设置）。具体配置由 `author.getDisplaySettingsForRoute()` 按当前路由选择；作品页在 `relatedWorksEnabled === false` 时返回 `null`，不做任何增强。
 - 通过扫描 `a[href*="/artworks/"]` 找到当前页面作品卡片，并选择包含最多作品卡片的父容器作为作品网格容器；
   在 `/artworks/{id}` 路由会过滤掉指向当前作品自身的卡片，只保留相关作品。
-- 给作品网格容器加 `.pvm-author-home-grid`，给真正的作品卡片加 `.pvm-author-home-card`（仅这些 li 进入网格列）；同级的分页 nav / 标题等非卡片节点 CSS 让它独占整行，不会被网格挤掉。
+- 给作品网格容器加 `.pvm-author-home-grid`，给真正的作品卡片加 `.pvm-author-home-card`（仅这些 li 进入网格列）；本轮已识别的非卡片节点（分页 nav / 标题等）打 `.pvm-author-home-extra` 让其独占整行。不使用 CSS 负选择器（如 `:not(.pvm-author-home-card)`），避免 Pixiv 无限加载的新作品卡片在下一轮扫描前短暂占满整行闪烁。
 - `每行作品数` 设置调整列数（`--pvm-author-home-columns`）；同时用 `zoom: var(--pvm-author-home-scale)` 真实放大卡片占位（行数越少卡片越大），避免 `transform: scale()` 视觉溢出遮住分页 nav。
 - `高清缩略图`（仅作者页）开启后，会按当前 DOM 卡片补拉作品详情，并用 Pixiv 接口返回的更清晰封面替换卡片图片；关闭或离开对应路由时恢复原始 `src` / `srcset` / `sizes` / lazy loading 属性。
   - 作者页（同一作者）走 `/ajax/user/{userId}/profile/illusts` 批量接口；相关作品（作者各异）走 `ensureDetailsForIds(..., { perId: true })`，按 id 调 `fetchArtworkDetail`，复用 `singleArtworkCache`。
@@ -208,7 +208,7 @@ popup 提供四个标签页：
 
 - 标记：颜色、标题变色、图片遮罩、隐藏已访问作品
 - 作者页：每行作品数（`−` / 数字 / `+` 步进按钮）、最低页数过滤、高清缩略图开关、悬停预览开关（作用于作者页 `authorPage*`）
-- 作品页：顶部两个开关 `隐藏作者其他作品横幅` / `隐藏评论区`（作用于作品页 `artworkPage*`，由 `pvm-artwork-sections.js` 实现）；下方"相关作品"子区域提供每行作品数、最低页数、悬停预览开关（作用于作品页底部相关作品列表 `relatedWorks*`，不含高清缩略图）
+- 作品页：顶部两个开关 `隐藏作者其他作品横幅` / `隐藏评论区`（作用于作品页 `artworkPage*`，由 `pvm-artwork-sections.js` 实现）；下方"相关作品"子区域提供启用总开关（`relatedWorksEnabled`，关闭时下方控件置灰）、每行作品数、最低页数、悬停预览开关（作用于作品页底部相关作品列表 `relatedWorks*`，不含高清缩略图）
 - 其他：合并了原"排除"和"备份"两个页签。排除按页面 URL 禁用当前页面标记渲染；备份提供导出 / 导入 / 清空本地记录
 
 打开 popup 时根据当前激活标签页的 URL 自动聚焦：作者页路由聚焦"作者页"，作品页路由聚焦"作品页"，其它情况聚焦"标记"。
@@ -233,7 +233,7 @@ pvmAuthorPanelUi
 
 `exclusions.pages` 使用 pathname 作为 key。
 
-`settings` 包含访问标记设置、作者页显示设置、相关作品显示设置和作品页区块开关；作者页显示字段包括 `authorPageGridColumns`、`authorPageMinPageCount`、`authorPageUseHighResThumbnails`、`authorPageHighResThumbnailQuality`、`authorPageHoverPreviewEnabled`、`authorPageHoverPreviewQuality`；相关作品显示字段为同名 `relatedWorks*` 系列，但 popup 不暴露 `relatedWorksUseHighResThumbnails`（始终为 `false`）；作品页区块开关包括 `artworkPageHideAuthorWorks`、`artworkPageHideComments`。`*HighResThumbnailQuality` 默认为 `"original"`，`*HoverPreviewQuality` 关闭时为 `"off"`、打开时为 `"original"`。
+`settings` 包含访问标记设置、作者页显示设置、相关作品显示设置和作品页区块开关；作者页显示字段包括 `authorPageGridColumns`、`authorPageMinPageCount`、`authorPageUseHighResThumbnails`、`authorPageHighResThumbnailQuality`、`authorPageHoverPreviewEnabled`、`authorPageHoverPreviewQuality`；相关作品显示字段为同名 `relatedWorks*` 系列，另有总开关 `relatedWorksEnabled`（默认 `true`，`false` 时作品页跳过相关作品增强），但 popup 不暴露 `relatedWorksUseHighResThumbnails`（始终为 `false`）；作品页区块开关包括 `artworkPageHideAuthorWorks`、`artworkPageHideComments`。`*HighResThumbnailQuality` 默认为 `"original"`，`*HoverPreviewQuality` 关闭时为 `"off"`、打开时为 `"original"`。
 
 `pvmAuthorPanel:{userId}` 是作者作品速览缓存，包含作者作品 ID 索引、已加载作品详情和缓存时间。
 

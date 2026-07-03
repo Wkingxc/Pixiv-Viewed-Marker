@@ -10,6 +10,7 @@
   author.HOME_GRID_MAX_COLUMNS = 6;
   author.HOME_MIN_PAGE_MAX = 999;
   author.HOME_GRID_CLASS = "pvm-author-home-grid";
+  author.HOME_EXTRA_CLASS = "pvm-author-home-extra";
   author.HOME_HIDDEN_CLASS = "pvm-hidden-page-count-artwork";
 
   author.HOVER_PREVIEW_QUALITIES = ["off", "small", "medium", "original"];
@@ -89,6 +90,7 @@
       };
     }
     if (routeContext?.type === "artwork") {
+      if (s.relatedWorksEnabled === false) return null;
       return {
         gridColumns: s.relatedWorksGridColumns,
         minPageCount: s.relatedWorksMinPageCount,
@@ -405,6 +407,7 @@
       authorPageHoverPreviewQuality: hoverQuality,
       relatedWorksGridColumns: clampNumber(raw.relatedWorksGridColumns, author.HOME_GRID_MIN_COLUMNS, author.HOME_GRID_MAX_COLUMNS, 6),
       relatedWorksMinPageCount: clampNumber(raw.relatedWorksMinPageCount, 0, author.HOME_MIN_PAGE_MAX, 0),
+      relatedWorksEnabled: raw.relatedWorksEnabled !== false,
       relatedWorksUseHighResThumbnails: raw.relatedWorksUseHighResThumbnails === true,
       relatedWorksHighResThumbnailQuality: relatedHighResQuality,
       relatedWorksHoverPreviewEnabled: relatedHoverEnabled,
