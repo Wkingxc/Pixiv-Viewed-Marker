@@ -278,10 +278,6 @@ input[type="range"] {
   gap: 13px;
 }
 
-.setup[hidden] {
-  display: none;
-}
-
 .setup p {
   margin-bottom: 9px;
 }

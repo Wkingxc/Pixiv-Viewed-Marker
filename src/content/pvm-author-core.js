@@ -36,6 +36,7 @@
   };
   let uiState = {
     pageMode: "scroll",
+    minPageCount: 1,
     offsetX: 0
   };
   let currentArtworkId = null;
@@ -347,9 +348,11 @@
   function normalizeUiState(raw) {
     // 历史值 "slider" / "buttons" 一律归一化为 "scroll"。
     const pageMode = raw?.pageMode === "wheel" ? "wheel" : "scroll";
+    const minPageCount = clampNumber(raw?.minPageCount, 1, author.HOME_MIN_PAGE_MAX, 1);
     const offsetX = Number.isFinite(raw?.offsetX) ? raw.offsetX : 0;
     return {
       pageMode,
+      minPageCount,
       offsetX
     };
   }

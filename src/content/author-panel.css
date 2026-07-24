@@ -69,6 +69,7 @@
 }
 
 .pvm-ap-current {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: rgba(248, 243, 246, 0.72);
@@ -83,6 +84,41 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.pvm-ap-actions {
+  flex: 0 0 auto;
+}
+
+.pvm-ap-page-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 34px;
+  border-radius: 10px;
+  padding: 0 8px;
+  color: rgba(248, 243, 246, 0.78);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pvm-ap-page-filter:focus-within {
+  box-shadow: 0 0 0 2px rgba(244, 118, 162, 0.46);
+}
+
+.pvm-ap-page-filter-input {
+  box-sizing: border-box;
+  width: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 2px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.24);
+  font: inherit;
+  text-align: center;
+  outline: none;
 }
 
 .pvm-ap-btn {
@@ -369,6 +405,11 @@
   text-align: center;
 }
 
+.pvm-ap-grid > .pvm-ap-message {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
 .pvm-author-home-grid {
   grid-template-columns: repeat(var(--pvm-author-home-columns, 6), minmax(0, 1fr)) !important;
   justify-items: stretch !important;
@@ -402,6 +443,10 @@
 .pvm-hidden-author-works-banner,
 .pvm-hidden-comments-section {
   display: none !important;
+}
+
+.pvm-compacted-related-works {
+  margin-top: var(--pvm-related-works-margin-top) !important;
 }
 
 #pvm-author-hover-preview {

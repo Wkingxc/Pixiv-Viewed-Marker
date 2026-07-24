@@ -7,7 +7,11 @@
 
   const HIDDEN_AUTHOR_WORKS_CLASS = "pvm-hidden-author-works-banner";
   const HIDDEN_COMMENTS_CLASS = "pvm-hidden-comments-section";
+  const COMPACTED_RELATED_CLASS = "pvm-compacted-related-works";
   const COMMENT_TITLE_PATTERN = /^(コメント|comments?|评论|評論|댓글)$/i;
+  const RELATED_TITLE_PATTERN = /^(関連作品|related works?|相关作品|相關作品|관련 작품)$/i;
+  const MAX_NORMAL_SECTION_GAP = 96;
+  const TARGET_SECTION_GAP = 32;
 
   function clearAll() {
     document.querySelectorAll(`.${HIDDEN_AUTHOR_WORKS_CLASS}`).forEach((node) => {
@@ -15,6 +19,10 @@
     });
     document.querySelectorAll(`.${HIDDEN_COMMENTS_CLASS}`).forEach((node) => {
       node.classList.remove(HIDDEN_COMMENTS_CLASS);
+    });
+    document.querySelectorAll(`.${COMPACTED_RELATED_CLASS}`).forEach((node) => {
+      node.classList.remove(COMPACTED_RELATED_CLASS);
+      node.style.removeProperty("--pvm-related-works-margin-top");
     });
   }
 
@@ -58,16 +66,61 @@
     return null;
   }
 
-  function findCommentsSection() {
-    const candidates = document.querySelectorAll("main section, main aside");
-    for (const section of candidates) {
-      if (section.closest("#pvm-author-panel")) continue;
-      const heading = section.querySelector("h1, h2, h3");
-      if (!heading) continue;
+  function findHeading(pattern) {
+    const headings = document.querySelectorAll("main h1, main h2, main h3");
+    for (const heading of headings) {
+      if (heading.closest("#pvm-author-panel")) continue;
       const text = (heading.textContent || "").trim();
-      if (COMMENT_TITLE_PATTERN.test(text)) return section;
+      if (pattern.test(text)) return heading;
     }
     return null;
+  }
+
+  function findCommentsSection() {
+    const heading = findHeading(COMMENT_TITLE_PATTERN);
+    return heading?.closest("section, aside") || heading?.parentElement || null;
+  }
+
+  function findRelatedWorksSection(main, relatedHeading) {
+    let node = relatedHeading.parentElement;
+    while (node && node !== main) {
+      if (node.querySelectorAll('a[href*="/artworks/"]').length >= 4) return node;
+      node = node.parentElement;
+    }
+    return relatedHeading.parentElement;
+  }
+
+  function compactSectionGap(main, commentsSection, relatedHeading) {
+    if (!commentsSection || commentsSection.contains(relatedHeading)) return;
+    const relatedSection = findRelatedWorksSection(main, relatedHeading);
+    if (!relatedSection || relatedSection.contains(commentsSection)) return;
+
+    const commentsRect = commentsSection.getBoundingClientRect();
+    const relatedRect = relatedHeading.getBoundingClientRect();
+    if (commentsRect.height <= 0 || relatedRect.height <= 0) return;
+
+    const gap = relatedRect.top - commentsRect.bottom;
+    if (gap <= MAX_NORMAL_SECTION_GAP) return;
+
+    const currentMarginTop = Number.parseFloat(getComputedStyle(relatedSection).marginTop) || 0;
+    const nextMarginTop = currentMarginTop - (gap - TARGET_SECTION_GAP);
+    relatedSection.style.setProperty("--pvm-related-works-margin-top", `${nextMarginTop}px`);
+    relatedSection.classList.add(COMPACTED_RELATED_CLASS);
+  }
+
+  // 不依赖 Pixiv 的动态 class 或广告节点：直接测量评论区与相关作品标题的距离。
+  function compactArtworkSectionGap() {
+    document.querySelectorAll(`.${COMPACTED_RELATED_CLASS}`).forEach((node) => {
+      node.classList.remove(COMPACTED_RELATED_CLASS);
+      node.style.removeProperty("--pvm-related-works-margin-top");
+    });
+
+    const main = document.querySelector("main");
+    const relatedHeading = findHeading(RELATED_TITLE_PATTERN);
+    if (!main || !relatedHeading) return;
+
+    const commentsSection = findCommentsSection();
+    compactSectionGap(main, commentsSection, relatedHeading);
   }
 
   function applyArtworkSections() {
@@ -104,6 +157,8 @@
         node.classList.remove(HIDDEN_COMMENTS_CLASS);
       });
     }
+
+    compactArtworkSectionGap();
   }
 
   let scheduleTimer = null;
@@ -117,6 +172,7 @@
 
   artworkSections.HIDDEN_AUTHOR_WORKS_CLASS = HIDDEN_AUTHOR_WORKS_CLASS;
   artworkSections.HIDDEN_COMMENTS_CLASS = HIDDEN_COMMENTS_CLASS;
+  artworkSections.COMPACTED_RELATED_CLASS = COMPACTED_RELATED_CLASS;
   artworkSections.apply = applyArtworkSections;
   artworkSections.scheduleApply = scheduleApply;
   artworkSections.clear = clearAll;

@@ -1,7 +1,6 @@
 (function initPopup() {
   const statusEl = document.getElementById("status");
   const backupFileEl = document.getElementById("backupFile");
-  const setupSectionEl = document.getElementById("setupSection");
   const visitedColorEl = document.getElementById("visitedColor");
   const colorValueEl = document.getElementById("colorValue");
   const markTitleEl = document.getElementById("markTitle");
@@ -178,11 +177,6 @@
 
   async function refreshData() {
     currentData = await PVM.storage.getAllData();
-    // 已经有任何访问记录就视为完成过初始化，不再显示导入入口
-    const hasAnyVisits =
-      Object.keys(currentData.viewedArtworks || {}).length > 0 ||
-      Object.keys(currentData.viewedUsers || {}).length > 0;
-    setupSectionEl.hidden = hasAnyVisits;
     renderSettings(currentData.settings);
     renderExcludedPages(excludedPagesEl, currentData.exclusions.pages || {});
   }
@@ -250,7 +244,7 @@
     try {
       const result = await PVM.historyImporter.importFromHistory();
       await refreshData();
-      setStatus(`初始化完成：作品 ${result.artworkCount}，作者 ${result.userCount}。`);
+      setStatus(`补充完成：作品 ${result.artworkCount}，作者 ${result.userCount}。`);
     } finally {
       await chrome.permissions.remove({ permissions: ["history"] });
     }
@@ -272,8 +266,23 @@
 
   async function handleExport() {
     const data = await PVM.storage.getAllData();
+    const artworkCount = Object.keys(data.viewedArtworks || {}).length;
+    const userCount = Object.keys(data.viewedUsers || {}).length;
+    const backup = {
+      schemaVersion: data.schemaVersion,
+      statistics: {
+        artworkCount,
+        userCount,
+        totalViewedCount: artworkCount + userCount
+      },
+      settings: data.settings,
+      viewedArtworks: data.viewedArtworks,
+      viewedUsers: data.viewedUsers,
+      exclusions: data.exclusions,
+      exportedAt: Date.now()
+    };
     const blob = new Blob(
-      [JSON.stringify({ ...data, exportedAt: Date.now() }, null, 2)],
+      [JSON.stringify(backup, null, 2)],
       { type: "application/json" }
     );
     const url = URL.createObjectURL(blob);
@@ -282,7 +291,7 @@
     anchor.download = backupName();
     anchor.click();
     URL.revokeObjectURL(url);
-    setStatus("备份已导出。");
+    setStatus(`备份已导出：作品 ${artworkCount}，作者 ${userCount}，合计 ${artworkCount + userCount}。`);
   }
 
   function handleImportClick() {

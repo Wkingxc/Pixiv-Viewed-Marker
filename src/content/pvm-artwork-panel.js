@@ -152,11 +152,47 @@
     return panel;
   }
 
-  function getTotalPages() {
-    return Math.max(1, Math.ceil(author.getState().ids.length / author.PAGE_SIZE));
+  function normalizeMinPageCount(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 1;
+    return Math.min(author.HOME_MIN_PAGE_MAX, Math.max(1, Math.round(numeric)));
+  }
+
+  function getMinPageCount() {
+    return normalizeMinPageCount(author.getUiState().minPageCount);
+  }
+
+  function getFilteredIds() {
+    const state = author.getState();
+    const minPageCount = getMinPageCount();
+    if (minPageCount <= 1) return state.ids.slice();
+    return state.ids.filter((id) => Number(state.workMap[id]?.pageCount || 1) >= minPageCount);
+  }
+
+  function getTotalPages(ids = getFilteredIds()) {
+    return Math.max(1, Math.ceil(ids.length / author.PAGE_SIZE));
   }
 
   // --- 渲染各部件 ---------------------------------------------------------
+  function renderMinPageCountFilter() {
+    return `
+      <label class="pvm-ap-page-filter" title="只显示页数大于等于此值的作品">
+        <span>≥</span>
+        <input
+          class="pvm-ap-page-filter-input"
+          data-control="min-page-count"
+          type="number"
+          min="1"
+          max="${author.HOME_MIN_PAGE_MAX}"
+          step="1"
+          value="${getMinPageCount()}"
+          aria-label="侧栏最低页数"
+        >
+        <span>页</span>
+      </label>
+    `;
+  }
+
   function renderPageModeButton() {
     const isWheelMode = author.getUiState().pageMode === "wheel";
     return `
@@ -170,8 +206,7 @@
     `;
   }
 
-  function renderFooter(totalPages) {
-    const showCurrentButton = author.getCurrentRouteContext()?.type === "artwork";
+  function renderFooter(totalPages, filteredCount, showCurrentButton) {
     const state = author.getState();
     const uiState = author.getUiState();
     if (uiState.pageMode === "wheel") {
@@ -186,7 +221,7 @@
     return `
       <div class="pvm-ap-footer pvm-ap-footer-scroll">
         ${showCurrentButton ? '<button class="pvm-ap-btn" data-action="current" type="button">定位</button>' : ""}
-        <span class="pvm-ap-page">共 ${state.ids.length} 件</span>
+        <span class="pvm-ap-page">共 ${filteredCount} 件</span>
       </div>
     `;
   }
@@ -198,6 +233,7 @@
       <div class="pvm-ap-head" data-drag-handle="true">
         <span class="pvm-ap-current">${message}</span>
         <div class="pvm-ap-actions">
+          ${renderMinPageCountFilter()}
           ${renderPageModeButton()}
         </div>
       </div>
@@ -267,46 +303,61 @@
       return;
     }
 
-    try {
-      await author.ensureDetailsForPage(state.page);
-    } catch (error) {
-      console.warn("[PVM] Failed to load author panel thumbnails.", error);
+    const minPageCount = getMinPageCount();
+    if (minPageCount > 1) {
+      try {
+        await author.ensureDetailsForIds(state.ids);
+      } catch (error) {
+        console.warn("[PVM] Failed to load artwork page counts for filtering.", error);
+      }
     }
-    const viewedSet = await author.getViewedSet();
-    const totalPages = getTotalPages();
+
+    const filteredIds = getFilteredIds();
+    const totalPages = getTotalPages(filteredIds);
     state.page = Math.min(Math.max(0, state.page), totalPages - 1);
     const isScrollMode = author.getUiState().pageMode !== "wheel";
     // 滚动浏览：一次性渲染所有作品，依靠网格滚动条平滑预览；
     // 滚轮翻页：保持原本按页渲染 6 件的行为。
     const visibleIds = isScrollMode
-      ? state.ids.slice()
-      : state.ids.slice(state.page * author.PAGE_SIZE, (state.page + 1) * author.PAGE_SIZE);
+      ? filteredIds
+      : filteredIds.slice(state.page * author.PAGE_SIZE, (state.page + 1) * author.PAGE_SIZE);
+    if (!isScrollMode) {
+      try {
+        await author.ensureDetailsForIds(visibleIds);
+      } catch (error) {
+        console.warn("[PVM] Failed to load author panel thumbnails.", error);
+      }
+    }
+    const viewedSet = await author.getViewedSet();
     const visibleWorks = visibleIds.map((id) => author.workForId(id));
-    const currentIndex = state.ids.findIndex((id) => id === author.getCurrentArtworkId());
+    const currentIndex = filteredIds.findIndex((id) => id === author.getCurrentArtworkId());
     const currentText = currentIndex >= 0
-      ? `当前位置 ${currentIndex + 1}/${state.ids.length}`
-      : `${state.ids.length} 件作品`;
+      ? `当前位置 ${currentIndex + 1}/${filteredIds.length}`
+      : (minPageCount > 1 ? `已筛选 ${filteredIds.length}/${state.ids.length} 件` : `${filteredIds.length} 件作品`);
 
     target.innerHTML = `
       <div class="pvm-ap-head" data-drag-handle="true">
         <span class="pvm-ap-current">${currentText}</span>
         <div class="pvm-ap-actions">
+          ${renderMinPageCountFilter()}
           ${renderPageModeButton()}
         </div>
       </div>
       <div class="pvm-ap-grid ${isScrollMode ? "is-scrollable" : ""}">
-        ${visibleWorks.map((work) => renderWork(work, viewedSet)).join("")}
+        ${visibleWorks.length
+          ? visibleWorks.map((work) => renderWork(work, viewedSet)).join("")
+          : '<div class="pvm-ap-message">没有符合页数条件的作品</div>'}
       </div>
-      ${renderFooter(totalPages)}
+      ${renderFooter(totalPages, filteredIds.length, currentIndex >= 0)}
     `;
     bindPanelEvents();
     if (author.authorPage) author.authorPage.scheduleUserArtworkEnhancements();
     if (isScrollMode) {
       // 滚动模式：先把全部作品详情拉到（拿到缩略图 URL），然后浏览器原生 loading="lazy"
       // 会自动只加载视口附近的图片，跟翻页一样不需要任何额外脚本。
-      const missingBefore = state.ids.some((id) => !state.workMap[id]);
+      const missingBefore = filteredIds.some((id) => !state.workMap[id]);
       if (missingBefore) {
-        author.ensureDetailsForIds(state.ids).then(() => {
+        author.ensureDetailsForIds(filteredIds).then(() => {
           // 详情到位后重渲一次，把刚拿到的 URL 填进 <img src>
           renderPanel().catch(console.error);
         }).catch((error) => console.warn("[PVM] ensureDetailsForIds failed.", error));
@@ -314,8 +365,14 @@
       alignCurrentCardWhenReady();
     } else {
       // 翻页模式：只预加载当前页前后两页。
-      void author.preloadPageDetails(state.page - 1);
-      void author.preloadPageDetails(state.page + 1);
+      const previousIds = filteredIds.slice((state.page - 1) * author.PAGE_SIZE, state.page * author.PAGE_SIZE);
+      const nextIds = filteredIds.slice((state.page + 1) * author.PAGE_SIZE, (state.page + 2) * author.PAGE_SIZE);
+      void author.ensureDetailsForIds(previousIds)
+        .then(() => author.preloadImagesForIds(previousIds))
+        .catch((error) => console.warn("[PVM] Failed to preload previous filtered page.", error));
+      void author.ensureDetailsForIds(nextIds)
+        .then(() => author.preloadImagesForIds(nextIds))
+        .catch((error) => console.warn("[PVM] Failed to preload next filtered page.", error));
       author.preloadImagesForIds(visibleIds);
     }
   }
@@ -356,6 +413,23 @@
   // --- 卡片点击 / 中键 / actions -----------------------------------------
   function bindPanelEvents() {
     if (!panel) return;
+    const minPageCountInput = panel.querySelector('[data-control="min-page-count"]');
+    if (minPageCountInput) {
+      minPageCountInput.addEventListener("wheel", (event) => event.stopPropagation());
+      minPageCountInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") minPageCountInput.blur();
+      });
+      minPageCountInput.addEventListener("change", async () => {
+        const minPageCount = normalizeMinPageCount(minPageCountInput.value);
+        minPageCountInput.value = String(minPageCount);
+        if (minPageCount === getMinPageCount()) return;
+        author.patchUiState({ minPageCount });
+        author.getState().page = 0;
+        author.saveUiState();
+        await renderPanel();
+      });
+    }
+
     panel.querySelectorAll(".pvm-ap-card").forEach((card) => {
       const navigateInCurrentTab = (event) => {
         event.preventDefault();
@@ -400,7 +474,7 @@
         const uiState = author.getUiState();
         if (action === "current") {
           if (uiState.pageMode === "wheel") {
-            state.page = author.currentPageFor(state.ids, author.getCurrentArtworkId());
+            state.page = author.currentPageFor(getFilteredIds(), author.getCurrentArtworkId());
           } else {
             // 滚动模式：把当前作品卡片滚到面板可视区
             scrollCurrentCardIntoView();
@@ -432,9 +506,10 @@
   function handlePanelWheel(event) {
     if (author.getUiState().pageMode !== "wheel") return;
     if (panel.hidden) return;
+    if (event.target.closest?.(".pvm-ap-page-filter")) return;
     if (Math.abs(event.deltaY) < 20) return;
 
-    const totalPages = getTotalPages();
+    const totalPages = getTotalPages(getFilteredIds());
     const state = author.getState();
     const direction = event.deltaY > 0 ? 1 : -1;
     const nextPage = Math.min(Math.max(state.page + direction, 0), totalPages - 1);
